@@ -1,0 +1,48 @@
+{
+  "name": "smart-disaster-coordination-system",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SE3070 Assignment 02 Phase 0 and Phase 1 foundation",
+  "packageManager": "npm@10.9.2",
+  "engines": {
+    "node": ">=22 <23",
+    "npm": ">=10"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n mobile,web,api -c cyan,magenta,yellow \"npm run dev -w @disaster/mobile\" \"npm run dev -w @disaster/web\" \"npm run dev -w @disaster/api\"",
+    "build": "npm run build:packages && npm run build:apps",
+    "build:packages": "npm run build -w @disaster/domain -w @disaster/shared-types -w @disaster/shared-validation -w @disaster/config -w @disaster/api-client",
+    "build:apps": "npm run build -w @disaster/api -w @disaster/web -w @disaster/mobile",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "npm run build:packages && npm run typecheck --workspaces --if-present",
+    "test": "npm run build:packages && npm run test --workspaces --if-present",
+    "test:coverage": "npm run build:packages && npm run test:coverage --workspaces --if-present",
+    "db:generate": "prisma generate --schema apps/api/prisma/schema.prisma",
+    "db:validate": "prisma validate --schema apps/api/prisma/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema apps/api/prisma/schema.prisma",
+    "db:migrate:deploy": "prisma migrate deploy --schema apps/api/prisma/schema.prisma",
+    "db:seed": "npm run db:seed -w @disaster/api",
+    "db:verify-seed": "npm run db:verify-seed -w @disaster/api",
+    "postinstall": "npm run db:generate"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.36.0",
+    "@types/node": "^22.18.6",
+    "@vitest/coverage-v8": "^3.2.4",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.36.0",
+    "globals": "^16.4.0",
+    "prettier": "^3.6.2",
+    "prisma": "^6.16.2",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.44.1",
+    "vitest": "^3.2.4"
+  }
+}

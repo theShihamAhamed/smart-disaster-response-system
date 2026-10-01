@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "Disaster Coordination Mobile",
+    "slug": "disaster-coordination-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": ["**/*"],
+    "android": {
+      "package": "lk.sliit.disastercoordination"
+    }
+  }
+}

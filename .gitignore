@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+.expo/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+Thumbs.db
+apps/api/prisma/dev.db
