@@ -16,6 +16,7 @@ export interface ApiErrorEnvelope {
 export interface AuthContext {
   readonly userId: string;
   readonly role: UserRole;
+  readonly assignedAreaId?: string;
   readonly districtId?: string;
   readonly canBroadcast?: boolean;
 }
