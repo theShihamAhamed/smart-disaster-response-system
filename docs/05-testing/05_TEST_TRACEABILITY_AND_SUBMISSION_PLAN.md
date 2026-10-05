@@ -105,6 +105,8 @@ apps/api/test/integration/*.test.ts
 
 Use fake clocks for timestamps, deterministic UUIDs where useful, repository fakes for unit tests, and a disposable PostgreSQL test database for transaction/concurrency integration tests. Mock only external gateways, maps and sensors; do not mock the business rules under test.
 
+GitHub Actions provisions its own temporary PostgreSQL service, then applies migrations, seeds and verifies it for each run. CI never connects to the team's Neon database. Developers should use an isolated Neon branch or the optional Docker PostgreSQL fallback for destructive database tests so that shared development data is not reset.
+
 ## Final report structure
 
 1. Cover page: group ID, campus, all registration numbers and member names.
