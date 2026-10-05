@@ -1,9 +1,19 @@
 import { API_BASE_PATH } from "@disaster/config";
 import express from "express";
+import {
+  createDevelopmentAuthContext,
+  createPrismaDevelopmentAuthResolver,
+  type ResolveDevelopmentAuthUser,
+} from "./development-auth.js";
 import { errorEnvelope, errorHandler } from "./errors.js";
+import { prisma } from "./prisma.js";
 import { requestId } from "./request-id.js";
 
-export function createApp() {
+export interface AppDependencies {
+  readonly resolveDevelopmentAuthUser?: ResolveDevelopmentAuthUser;
+}
+
+export function createApp(dependencies: AppDependencies = {}) {
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json({ limit: "1mb" }));
@@ -14,6 +24,10 @@ export function createApp() {
   };
   app.get("/health", health);
   app.get(`${API_BASE_PATH}/health`, health);
+
+  const resolveDevelopmentAuthUser =
+    dependencies.resolveDevelopmentAuthUser ?? createPrismaDevelopmentAuthResolver(prisma);
+  app.use(createDevelopmentAuthContext(resolveDevelopmentAuthUser));
 
   app.use((_request, response) => {
     response.status(404).json(errorEnvelope("NOT_FOUND", "The requested resource was not found."));
