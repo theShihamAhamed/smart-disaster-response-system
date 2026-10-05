@@ -1,4 +1,9 @@
-import type { HazardType, LocationSource, ReportStatus } from "@disaster/domain";
+import type {
+  HazardType,
+  LocationSource,
+  ReportStatus,
+  VerificationResult,
+} from "@disaster/domain";
 
 export interface PendingReport {
   readonly id: string;
@@ -25,7 +30,30 @@ export interface ReportForReview extends PendingReport {
 export interface HazardVerificationRepository {
   listPendingReports(): Promise<readonly PendingReport[]>;
   findReportForReview(reportId: string): Promise<ReportForReview | null>;
+  decidePendingReport(command: DecisionCommand): Promise<DecisionPersistenceResult>;
 }
+
+export interface DecisionCommand {
+  readonly reportId: string;
+  readonly officerId: string;
+  readonly result: VerificationResult;
+  readonly reason?: string;
+  readonly decidedAt: Date;
+}
+
+export interface VerificationDecisionRecord {
+  readonly id: string;
+  readonly reportId: string;
+  readonly officerId: string;
+  readonly result: VerificationResult;
+  readonly reason: string | null;
+  readonly decidedAt: Date;
+}
+
+export type DecisionPersistenceResult =
+  | { readonly kind: "DECIDED"; readonly decision: VerificationDecisionRecord }
+  | { readonly kind: "REPORT_NOT_FOUND" }
+  | { readonly kind: "REPORT_ALREADY_PROCESSED"; readonly status: ReportStatus };
 
 export class ReportNotFoundError extends Error {
   public readonly code = "NOT_FOUND";
@@ -33,5 +61,23 @@ export class ReportNotFoundError extends Error {
   public constructor(reportId: string) {
     super(`Hazard report ${reportId} was not found.`);
     this.name = "ReportNotFoundError";
+  }
+}
+
+export class ValidationError extends Error {
+  public readonly code = "VALIDATION_ERROR";
+
+  public constructor(message: string) {
+    super(message);
+    this.name = "ValidationError";
+  }
+}
+
+export class ReportAlreadyProcessedError extends Error {
+  public readonly code = "REPORT_ALREADY_PROCESSED";
+
+  public constructor(public readonly status: ReportStatus) {
+    super(`Hazard report has already been processed as ${status}.`);
+    this.name = "ReportAlreadyProcessedError";
   }
 }
