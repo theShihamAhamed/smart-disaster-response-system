@@ -26,6 +26,7 @@ jobs:
           --health-retries 12
     env:
       DATABASE_URL: postgresql://disaster_ci:ci_only_password@localhost:5432/disaster_management_test?schema=public
+      DIRECT_DATABASE_URL: postgresql://disaster_ci:ci_only_password@localhost:5432/disaster_management_test?schema=public
       CI: true
 
     steps:

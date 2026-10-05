@@ -14,6 +14,10 @@ flowchart LR
 
 The mobile app owns the citizen and volunteer reporting experience, including local offline storage. The web app owns DMC verification, alert broadcasting and district relief allocation. The API exposes one consistent authorization, validation, transaction and audit model.
 
+## Database environments
+
+The database technology remains PostgreSQL and the ORM remains Prisma. Neon is the hosting provider for shared development PostgreSQL; it is not a replacement technology or a business-logic dependency. GitHub Actions uses a temporary isolated PostgreSQL service for reproducible validation, and Docker PostgreSQL remains an optional local fallback. See [Neon development setup](NEON_DEVELOPMENT_SETUP.md) for operational guidance.
+
 ## Recommended repository structure
 
 ```text
@@ -198,4 +202,3 @@ The return-to-available workflow is outside the selected use case.
 12. Only one officer operation can win a conflicting version/state update.
 13. An `EN_ROUTE` or `UNAVAILABLE` rescue team cannot be dispatched.
 14. Audit/log records are created in the same transaction as the business state change they describe.
-

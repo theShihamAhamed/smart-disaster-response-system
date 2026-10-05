@@ -12,7 +12,7 @@ This repository is the shared implementation foundation for SE3070 Assignment 02
 - `packages/shared-validation`: Zod schemas for shared primitives and enums.
 - `packages/api-client`: typed HTTP client foundation and health client.
 - `packages/config`: shareable application configuration constants.
-- PostgreSQL and Prisma provide persistence.
+- PostgreSQL and Prisma provide persistence; Neon hosts the preferred shared development database.
 
 No feature application service, controller or repository is placed in a shared package.
 
@@ -30,18 +30,49 @@ Submission and verification remain separate components. Eshan's component does n
 ## Requirements
 
 - Node.js 22 and npm 10
-- Docker Desktop or another PostgreSQL 17-compatible server
+- Access to the team's Neon project for the recommended shared development workflow
+- Docker Desktop only when using the optional local PostgreSQL fallback
 
 ## Local setup
 
-1. Copy `.env.example` to `.env` and change the local-only placeholder password if needed.
-2. Run `npm ci` after the lockfile exists (use `npm install` only when intentionally updating dependencies).
-3. Start PostgreSQL with `docker compose up -d postgres`.
-4. Run `npm run db:migrate:deploy`.
-5. Run `npm run db:seed` and `npm run db:verify-seed`.
+1. Obtain access to the team's Neon development project and the appropriate database branch.
+2. Copy `.env.example` to `.env`.
+3. Put the Neon pooled connection string in `DATABASE_URL` and the direct/unpooled connection string in `DIRECT_DATABASE_URL`.
+4. Run `npm ci` (use `npm install` only when intentionally updating dependencies).
+5. Run `npm run db:validate`, `npm run db:migrate:deploy`, `npm run db:seed` and `npm run db:verify-seed`.
 6. Run `npm run dev` to start the three application shells.
 
-The Docker Compose defaults are development placeholders, not production credentials.
+See [Neon development setup](docs/04-architecture/NEON_DEVELOPMENT_SETUP.md) for team branch guidance and database safety rules.
+
+## Database setup
+
+### Recommended: Neon PostgreSQL
+
+Neon is the hosted provider for the team's development PostgreSQL databases. It does not change the architecture: the applications still access PostgreSQL through Prisma.
+
+After the group leader creates the Neon project, use the pooled connection string for normal application traffic and the direct connection string for Prisma migration commands. Keep both values only in the uncommitted `.env` file. Then run:
+
+```text
+npm ci
+npm run db:validate
+npm run db:migrate:deploy
+npm run db:seed
+npm run db:verify-seed
+npm run dev
+```
+
+Coordinate migration and seed operations before running them against a shared database. Never run `prisma migrate reset` against a shared Neon environment.
+
+### Optional local PostgreSQL fallback
+
+The existing Docker Compose service remains available for isolated work and recovery. To use it, start `docker compose up -d postgres` and set both database variables in your uncommitted `.env` to the local service:
+
+```dotenv
+DATABASE_URL="postgresql://disaster_app:phase1_dev_only@localhost:5433/disaster_management?schema=public"
+DIRECT_DATABASE_URL="postgresql://disaster_app:phase1_dev_only@localhost:5433/disaster_management?schema=public"
+```
+
+These Docker Compose values are development placeholders, not production credentials. Docker is not required for the normal Neon workflow.
 
 ## Commands
 
@@ -59,7 +90,7 @@ The Docker Compose defaults are development placeholders, not production credent
 | `npm run db:seed`           | Load deterministic valid demo records             |
 | `npm run db:verify-seed`    | Verify deterministic record counts and key states |
 
-## Database reset and recreation
+## Optional local database reset and recreation
 
 For a disposable local database, stop the service and remove only the named Compose volume, then start PostgreSQL again and run migration, seed and verification:
 
@@ -71,7 +102,7 @@ npm run db:seed
 npm run db:verify-seed
 ```
 
-`docker compose down -v` deletes local database data. Never use it against a database containing needed information.
+`docker compose down -v` deletes the optional local Docker database volume. For any Prisma reset or destructive database operation, first confirm that the active URLs point to an isolated disposable database, never a shared Neon branch.
 
 ## Phase boundary
 
