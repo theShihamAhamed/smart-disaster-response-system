@@ -5,6 +5,7 @@ import {
   createPrismaDevelopmentAuthResolver,
   type ResolveDevelopmentAuthUser,
 } from "./development-auth.js";
+import { createWebCors } from "./cors.js";
 import { errorEnvelope, errorHandler } from "./errors.js";
 import { prisma } from "./prisma.js";
 import { requestId } from "./request-id.js";
@@ -16,6 +17,7 @@ export interface AppDependencies {
 export function createApp(dependencies: AppDependencies = {}) {
   const app = express();
   app.disable("x-powered-by");
+  app.use(createWebCors());
   app.use(express.json({ limit: "1mb" }));
   app.use(requestId);
 

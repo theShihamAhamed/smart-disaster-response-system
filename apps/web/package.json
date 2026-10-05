@@ -11,6 +11,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@disaster/api-client": "0.1.0",
     "@disaster/config": "0.1.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
