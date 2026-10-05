@@ -1,4 +1,6 @@
 import { PROJECT_NAME } from "@disaster/config";
+import { VerificationDashboard } from "./features/verification/VerificationDashboard";
+import type { VerificationApi } from "./features/verification/verification-api";
 
 const officerAreas = [
   {
@@ -11,7 +13,7 @@ const officerAreas = [
   },
 ] as const;
 
-export function App() {
+export function App({ verificationApi }: { readonly verificationApi?: VerificationApi }) {
   return (
     <main>
       <header>
@@ -19,15 +21,19 @@ export function App() {
         <h1>{PROJECT_NAME}</h1>
         <p className="lede">Officer application foundation</p>
       </header>
-      <section aria-label="Officer areas" className="areas">
-        {officerAreas.map((area) => (
-          <article key={area.title}>
-            <h2>{area.title}</h2>
-            <p>{area.description}</p>
-            <span>Phase 0 shell</span>
-          </article>
-        ))}
-      </section>
+      {verificationApi ? (
+        <VerificationDashboard api={verificationApi} />
+      ) : (
+        <section aria-label="Officer areas" className="areas">
+          {officerAreas.map((area) => (
+            <article key={area.title}>
+              <h2>{area.title}</h2>
+              <p>{area.description}</p>
+              <span>Phase 0 shell</span>
+            </article>
+          ))}
+        </section>
+      )}
       <p className="boundary">
         Assessed verification, broadcasting and relief-allocation workflows are intentionally not
         implemented in this phase.
