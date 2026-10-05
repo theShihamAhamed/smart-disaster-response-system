@@ -29,6 +29,12 @@ Error envelope:
 
 The server never trusts a client-provided role, owner, final status, available stock, outstanding quantity, recipient count or derived request state.
 
+### Development/demo authentication
+
+The assignment uses `X-Dev-User-Id: <seeded-user-uuid>` as a development/demo identity convention, not as production authentication. The header identifies only a user. The API loads that user and the required role profile from PostgreSQL, then derives the trusted role, volunteer assigned area, DMC broadcast permission or District Officer district scope in `response.locals.auth`. Feature modules must use that server-derived context and must never accept role, district or permissions from request payloads or headers.
+
+The development header is enabled only when `DEV_AUTH_ENABLED=true`; `false`, a missing value or any other value leaves it disabled. This explicit flag permits a controlled assignment demonstration even when a hosting provider sets `NODE_ENV=production`. Production login, registration, password handling, sessions, JWT issuance, refresh tokens and OAuth are outside the assignment scope.
+
 ## Submit Citizen Hazard Report
 
 ### `POST /hazard-reports`
@@ -264,4 +270,3 @@ Foreign keys must prevent orphaned decisions, alerts, allocations, distribution 
 | Allocate resources | No | No | No | Yes, own district |
 
 Authentication mechanics may be simple for the assignment, but authorization checks must exist in the API and have unit tests.
-

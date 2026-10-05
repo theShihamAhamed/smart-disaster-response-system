@@ -5,7 +5,7 @@ import { HttpError } from "./errors.js";
 
 export const requireRoles = (...allowedRoles: readonly UserRole[]): RequestHandler => {
   return (_request, response, next) => {
-    const auth = response.locals.auth as AuthContext | undefined;
+    const auth = response.locals.auth;
     if (!auth) {
       next(new HttpError(401, "UNAUTHENTICATED", "Authentication is required."));
       return;

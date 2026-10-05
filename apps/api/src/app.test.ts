@@ -63,7 +63,7 @@ describe("API foundation", () => {
       },
       requireRoles(UserRole.DISTRICT_OFFICER),
       (_request, response) => {
-        requireOwnDistrict(response.locals.auth, "d1");
+        requireOwnDistrict(response.locals.auth!, "d1");
         response.sendStatus(204);
       },
     );
