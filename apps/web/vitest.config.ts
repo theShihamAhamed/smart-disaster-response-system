@@ -10,7 +10,7 @@ export default mergeConfig(
       environment: "jsdom",
       setupFiles: ["./src/test-setup.ts"],
       coverage: {
-        exclude: ["src/main.tsx", "src/test-setup.ts", "**/*.config.ts", "dist/**"],
+        exclude: ["src/main.tsx", "src/test-setup.ts", "**/*.config.ts", "**/*.d.ts", "dist/**"],
       },
     },
   }),
