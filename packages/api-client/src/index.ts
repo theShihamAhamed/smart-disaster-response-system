@@ -13,21 +13,49 @@ export class ApiClientError extends Error {
 export interface HttpClientOptions {
   readonly baseUrl: string;
   readonly fetchImpl?: typeof fetch;
+  readonly defaultHeaders?: HeadersInit;
 }
 
-export function createHttpClient({ baseUrl, fetchImpl = fetch }: HttpClientOptions) {
-  const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
+export type GetRequestOptions = Omit<RequestInit, "body" | "method">;
 
-  async function getHealth(): Promise<HealthResponse> {
-    const response = await fetchImpl(`${normalizedBaseUrl}/health`, {
-      headers: { Accept: "application/json" },
+export function createHttpClient({
+  baseUrl,
+  fetchImpl = fetch,
+  defaultHeaders,
+}: HttpClientOptions) {
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/, "");
+
+  function buildHeaders(requestHeaders?: HeadersInit): Headers {
+    const headers = new Headers(defaultHeaders);
+
+    new Headers(requestHeaders).forEach((value, key) => {
+      headers.set(key, value);
     });
-    const body = (await response.json()) as HealthResponse | ApiErrorEnvelope;
+
+    if (!headers.has("Accept")) {
+      headers.set("Accept", "application/json");
+    }
+
+    return headers;
+  }
+
+  async function get<T>(path: string, requestOptions: GetRequestOptions = {}): Promise<T> {
+    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+    const response = await fetchImpl(`${normalizedBaseUrl}${normalizedPath}`, {
+      ...requestOptions,
+      method: "GET",
+      headers: buildHeaders(requestOptions.headers),
+    });
+    const body = (await response.json()) as T | ApiErrorEnvelope;
     if (!response.ok) {
       throw new ApiClientError(response.status, body as ApiErrorEnvelope);
     }
-    return body as HealthResponse;
+    return body as T;
   }
 
-  return { getHealth } as const;
+  async function getHealth(): Promise<HealthResponse> {
+    return get<HealthResponse>("/health");
+  }
+
+  return { get, getHealth } as const;
 }

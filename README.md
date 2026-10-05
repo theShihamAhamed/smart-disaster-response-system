@@ -44,6 +44,8 @@ Submission and verification remain separate components. Eshan's component does n
 
 See [Neon development setup](docs/04-architecture/NEON_DEVELOPMENT_SETUP.md) for team branch guidance and database safety rules.
 
+For an officer web demonstration, set `VITE_API_BASE_URL` and a selected seeded officer UUID in `VITE_DEV_USER_ID` in the ignored root `.env` file, set `WEB_ORIGIN` to the exact web origin allowed by the API, and explicitly enable the API with `DEV_AUTH_ENABLED=true`. These browser-visible values are development/demo configuration, not secrets or production authentication. Mobile continues to use `EXPO_PUBLIC_API_BASE_URL`.
+
 ## Database setup
 
 ### Recommended: Neon PostgreSQL

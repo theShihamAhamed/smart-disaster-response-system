@@ -35,6 +35,10 @@ The assignment uses `X-Dev-User-Id: <seeded-user-uuid>` as a development/demo id
 
 The development header is enabled only when `DEV_AUTH_ENABLED=true`; `false`, a missing value or any other value leaves it disabled. This explicit flag permits a controlled assignment demonstration even when a hosting provider sets `NODE_ENV=production`. Production login, registration, password handling, sessions, JWT issuance, refresh tokens and OAuth are outside the assignment scope.
 
+The officer web app reads `VITE_API_BASE_URL` and the optional development/demo UUID `VITE_DEV_USER_ID` from Vite's browser-visible environment. Its shared API client sends that UUID only as `X-Dev-User-Id`; it never sends a role, district or broadcast permission. The API must also have `DEV_AUTH_ENABLED=true` to accept the header. The mobile app continues to use `EXPO_PUBLIC_API_BASE_URL` and is otherwise unaffected by this web convention.
+
+The API permits browser access only from the exact origin configured by `WEB_ORIGIN`. Its central CORS policy allows `GET`, `POST`, `PATCH` and `OPTIONS` requests with JSON, `Idempotency-Key` and `X-Dev-User-Id` headers. A missing `WEB_ORIGIN` grants no browser origin, and deployed environments configure their frontend origin without source-code changes.
+
 ## Submit Citizen Hazard Report
 
 ### `POST /hazard-reports`
