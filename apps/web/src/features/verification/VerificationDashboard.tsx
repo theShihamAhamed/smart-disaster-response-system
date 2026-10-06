@@ -21,6 +21,9 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
   const [evidenceAttempt, setEvidenceAttempt] = useState(0);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [verificationNotes, setVerificationNotes] = useState("");
+  const [finalVerificationNotes, setFinalVerificationNotes] = useState<string>();
   const [decisionError, setDecisionError] = useState<string>();
   const [decisionLocked, setDecisionLocked] = useState(false);
   const [conflictReviewError, setConflictReviewError] = useState(false);
@@ -69,7 +72,7 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
   const requestConfirmation = (result: "VERIFIED" | "REJECTED") => {
     if (!review || review.status !== "PENDING" || decisionLocked || submitting || !evidenceLoaded)
       return;
-    const trimmed = reason.trim();
+    const trimmed = (result === "REJECTED" ? reason : verificationNotes).trim();
     if (result === "REJECTED" && (trimmed.length < 10 || trimmed.length > 500)) {
       setDecisionError("A rejection reason must contain 10 to 500 characters.");
       return;
@@ -78,8 +81,9 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
     setConfirmation({
       reportId: review.id,
       result,
-      reason: result === "REJECTED" ? trimmed : "",
+      reason: trimmed,
     });
+    if (result === "VERIFIED") setVerifying(false);
   };
 
   const decide = async () => {
@@ -96,28 +100,39 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
     const attemptMatches =
       decisionAttempt?.reportId === review.id &&
       decisionAttempt.result === result &&
-      decisionAttempt.reason === (result === "REJECTED" ? trimmed : "");
+      decisionAttempt.reason === trimmed;
     const idempotencyKey = attemptMatches ? decisionAttempt.key : crypto.randomUUID();
     setDecisionAttempt({
       reportId: review.id,
       result,
-      reason: result === "REJECTED" ? trimmed : "",
+      reason: trimmed,
       key: idempotencyKey,
     });
     setSubmitting(true);
     setDecisionError(undefined);
     try {
-      await api.decideReport(
+      const decision = await api.decideReport(
         review.id,
-        result === "REJECTED" ? { result, reason: trimmed } : { result },
+        result === "REJECTED" || trimmed ? { result, reason: trimmed } : { result },
         idempotencyKey,
       );
       setSuccess(`Report ${result.toLowerCase()} successfully.`);
       setReview({ ...review, status: result });
+      if (result === "VERIFIED") {
+        const savedReason =
+          typeof decision === "object" && decision !== null && "reason" in decision
+            ? (decision as { reason?: unknown }).reason
+            : undefined;
+        setFinalVerificationNotes(
+          typeof savedReason === "string" ? savedReason.trim() || undefined : undefined,
+        );
+      }
       setDecisionLocked(true);
       setConfirmation(undefined);
       setRejecting(false);
       setReason("");
+      setVerificationNotes("");
+      setVerifying(false);
       setDecisionAttempt(undefined);
       loadQueue();
     } catch (error) {
@@ -231,6 +246,9 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
                     setEscalationError(undefined);
                     setRejecting(false);
                     setReason("");
+                    setVerifying(false);
+                    setVerificationNotes("");
+                    setFinalVerificationNotes(undefined);
                     setDecisionError(undefined);
                   }
                   setEvidenceLoaded(false);
@@ -275,6 +293,9 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
               <p role="status">
                 This report has already been processed. Final status: {review.status}.
               </p>
+            )}
+            {review.status === "VERIFIED" && finalVerificationNotes && (
+              <p>Verification notes: {finalVerificationNotes}</p>
             )}
             {review.status === "VERIFIED" && (
               <section aria-label="Draft alert escalation">
@@ -346,6 +367,7 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
                 setEvidenceLoaded(false);
                 setEvidenceFailed(true);
                 setConfirmation(undefined);
+                setVerifying(false);
               }}
             />
             {evidenceFailed && (
@@ -366,13 +388,42 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
               <section aria-label="Decision actions">
                 <button
                   disabled={submitting || !evidenceLoaded}
-                  onClick={() => requestConfirmation("VERIFIED")}
+                  onClick={() => {
+                    setRejecting(false);
+                    setVerifying(true);
+                  }}
                 >
                   Verify
                 </button>
-                <button disabled={submitting || !evidenceLoaded} onClick={() => setRejecting(true)}>
+                <button
+                  disabled={submitting || !evidenceLoaded}
+                  onClick={() => {
+                    setVerifying(false);
+                    setRejecting(true);
+                  }}
+                >
                   Reject
                 </button>
+                {verifying && (
+                  <>
+                    <label>
+                      Optional verification notes
+                      <textarea
+                        value={verificationNotes}
+                        onChange={(event) => setVerificationNotes(event.target.value)}
+                      />
+                    </label>
+                    <button
+                      disabled={submitting || !evidenceLoaded}
+                      onClick={() => requestConfirmation("VERIFIED")}
+                    >
+                      Continue to confirmation
+                    </button>
+                    <button disabled={submitting} onClick={() => setVerifying(false)}>
+                      Cancel verification
+                    </button>
+                  </>
+                )}
                 {rejecting && (
                   <>
                     <label>
@@ -407,6 +458,9 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
           <p>Report ID: {confirmation.reportId}</p>
           <p>Chosen result: {confirmation.result}</p>
           {confirmation.result === "REJECTED" && <p>Rejection reason: {confirmation.reason}</p>}
+          {confirmation.result === "VERIFIED" && confirmation.reason && (
+            <p>Verification notes: {confirmation.reason}</p>
+          )}
           <button disabled={submitting || !evidenceLoaded} onClick={() => void decide()}>
             Confirm decision
           </button>
