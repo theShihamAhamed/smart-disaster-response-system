@@ -284,7 +284,7 @@ describe("verification API", () => {
     });
   });
 
-  it("maps a missing report to the standard not-found envelope", async () => {
+  it("keeps a valid but unknown review UUID as not found", async () => {
     const { app } = createVerificationApp();
     const response = await officerRequest(app).get(`/api/v1/verification/reports/${unknownId}`);
 
@@ -311,14 +311,6 @@ describe("verification API", () => {
     expect(response.body.error.code).toBe("VALIDATION_ERROR");
   });
 
-  it("keeps a valid but unknown review UUID as not found", async () => {
-    const { app } = createVerificationApp();
-    const response = await officerRequest(app).get(`/api/v1/verification/reports/${unknownId}`);
-
-    expect(response.status).toBe(404);
-    expect(response.body.error.code).toBe("NOT_FOUND");
-  });
-
   it("keeps a valid but unknown decision UUID as not found", async () => {
     const { app } = createVerificationApp();
     const response = await officerRequest(app)
@@ -328,6 +320,43 @@ describe("verification API", () => {
 
     expect(response.status).toBe(404);
     expect(response.body.error.code).toBe("NOT_FOUND");
+  });
+
+  it("rejects a malformed decision Idempotency-Key", async () => {
+    const { app } = createVerificationApp();
+    const response = await officerRequest(app)
+      .post(`/api/v1/verification/reports/${reportId}/decision`)
+      .set("Idempotency-Key", "not-a-uuid")
+      .send({ result: VerificationResult.VERIFIED });
+
+    expect(response.status).toBe(422);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("rejects unknown fields in a decision request body", async () => {
+    const { app } = createVerificationApp();
+    const response = await officerRequest(app)
+      .post(`/api/v1/verification/reports/${reportId}/decision`)
+      .set("Idempotency-Key", commandKey)
+      .send({ result: VerificationResult.VERIFIED, unexpected: true });
+
+    expect(response.status).toBe(422);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("rejects invalid status and unexpected fields in the pending queue query", async () => {
+    const { app } = createVerificationApp();
+    const invalidStatus = await officerRequest(app).get(
+      "/api/v1/verification/reports?status=VERIFIED",
+    );
+    const unexpectedField = await officerRequest(app).get(
+      "/api/v1/verification/reports?unexpected=value",
+    );
+
+    expect(invalidStatus.status).toBe(422);
+    expect(invalidStatus.body.error.code).toBe("VALIDATION_ERROR");
+    expect(unexpectedField.status).toBe(422);
+    expect(unexpectedField.body.error.code).toBe("VALIDATION_ERROR");
   });
 
   it("uses the trusted officer identity when verifying a pending report", async () => {
