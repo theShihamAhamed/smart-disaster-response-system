@@ -23,14 +23,28 @@ export interface ReportReview extends PendingReport {
 export interface VerificationApi {
   listPendingReports(): Promise<readonly PendingReport[]>;
   getReportForReview(reportId: string): Promise<ReportReview>;
+  decideReport(
+    reportId: string,
+    body: { result: "VERIFIED" | "REJECTED"; reason?: string },
+    idempotencyKey: string,
+  ): Promise<unknown>;
 }
 
 export function createVerificationApi(client: {
   get<T>(path: string): Promise<T>;
+  post<TResponse, TBody>(
+    path: string,
+    options: { body: TBody; headers: HeadersInit },
+  ): Promise<TResponse>;
 }): VerificationApi {
   return {
     listPendingReports: () =>
       client.get<readonly PendingReport[]>("/verification/reports?status=PENDING"),
     getReportForReview: (reportId) => client.get<ReportReview>(`/verification/reports/${reportId}`),
+    decideReport: (reportId, body, idempotencyKey) =>
+      client.post(`/verification/reports/${reportId}/decision`, {
+        body,
+        headers: { "Idempotency-Key": idempotencyKey },
+      }),
   };
 }
