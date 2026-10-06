@@ -23,6 +23,11 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
   const [reason, setReason] = useState("");
   const [decisionError, setDecisionError] = useState<string>();
   const [submitting, setSubmitting] = useState(false);
+  const [confirmation, setConfirmation] = useState<{
+    reportId: string;
+    result: "VERIFIED" | "REJECTED";
+    reason: string;
+  }>();
   const [success, setSuccess] = useState<string>();
   const [decisionAttempt, setDecisionAttempt] = useState<{
     reportId: string;
@@ -52,13 +57,24 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
       .catch(() => setReviewError(true));
   }, [api, selectedId, reviewAttempt]);
 
-  const decide = async (result: "VERIFIED" | "REJECTED") => {
+  const requestConfirmation = (result: "VERIFIED" | "REJECTED") => {
     if (!review || submitting || !evidenceLoaded) return;
     const trimmed = reason.trim();
     if (result === "REJECTED" && (trimmed.length < 10 || trimmed.length > 500)) {
       setDecisionError("A rejection reason must contain 10 to 500 characters.");
       return;
     }
+    setDecisionError(undefined);
+    setConfirmation({
+      reportId: review.id,
+      result,
+      reason: result === "REJECTED" ? trimmed : "",
+    });
+  };
+
+  const decide = async () => {
+    if (!review || !confirmation || submitting || !evidenceLoaded) return;
+    const { result, reason: trimmed } = confirmation;
     const attemptMatches =
       decisionAttempt?.reportId === review.id &&
       decisionAttempt.result === result &&
@@ -81,6 +97,7 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
       setSuccess(`Report ${result.toLowerCase()} successfully.`);
       setSelectedId(undefined);
       setReview(null);
+      setConfirmation(undefined);
       setRejecting(false);
       setReason("");
       setDecisionAttempt(undefined);
@@ -94,6 +111,7 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
         setDecisionError("This report has already been processed.");
         setSelectedId(undefined);
         setReview(null);
+        setConfirmation(undefined);
         loadQueue();
         setDecisionAttempt(undefined);
       } else setDecisionError("Unable to submit the decision. Please retry.");
@@ -123,6 +141,7 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
                 onClick={() => {
                   if (selectedId !== report.id) {
                     setDecisionAttempt(undefined);
+                    setConfirmation(undefined);
                     setRejecting(false);
                     setReason("");
                     setDecisionError(undefined);
@@ -193,6 +212,7 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
               onError={() => {
                 setEvidenceLoaded(false);
                 setEvidenceFailed(true);
+                setConfirmation(undefined);
               }}
             />
             {evidenceFailed && (
@@ -212,7 +232,7 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
             <section aria-label="Decision actions">
               <button
                 disabled={submitting || !evidenceLoaded}
-                onClick={() => void decide("VERIFIED")}
+                onClick={() => requestConfirmation("VERIFIED")}
               >
                 Verify
               </button>
@@ -227,9 +247,9 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
                   </label>
                   <button
                     disabled={submitting || !evidenceLoaded}
-                    onClick={() => void decide("REJECTED")}
+                    onClick={() => requestConfirmation("REJECTED")}
                   >
-                    Confirm rejection
+                    Continue to confirmation
                   </button>
                 </>
               )}
@@ -238,6 +258,25 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
           </>
         )}
       </article>
+      {confirmation && review && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="decision-confirmation-title"
+          className="decision-confirmation"
+        >
+          <h2 id="decision-confirmation-title">Confirm report decision</h2>
+          <p>Report ID: {confirmation.reportId}</p>
+          <p>Chosen result: {confirmation.result}</p>
+          {confirmation.result === "REJECTED" && <p>Rejection reason: {confirmation.reason}</p>}
+          <button disabled={submitting || !evidenceLoaded} onClick={() => void decide()}>
+            Confirm decision
+          </button>
+          <button disabled={submitting} onClick={() => setConfirmation(undefined)}>
+            Cancel
+          </button>
+        </div>
+      )}
     </section>
   );
 }
