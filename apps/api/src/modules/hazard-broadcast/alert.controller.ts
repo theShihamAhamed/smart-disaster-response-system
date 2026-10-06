@@ -7,6 +7,14 @@ import { ReportNotFoundError, ReportNotVerifiedError, ValidationError } from "./
 
 const reportIdParamsSchema = z.object({ reportId: uuidSchema });
 
+function parseReportIdParam(params: Record<string, unknown>): string {
+  const parsed = reportIdParamsSchema.safeParse(params);
+  if (!parsed.success) {
+    throw new ReportNotFoundError(String(params.reportId ?? "unknown"));
+  }
+  return parsed.data.reportId;
+}
+
 function mapFeatureError(error: unknown): Error {
   if (error instanceof ReportNotFoundError) {
     return new HttpError(404, "NOT_FOUND", "The requested resource was not found.");
@@ -33,7 +41,7 @@ export class AlertController {
 
   public readonly createFromReport: RequestHandler = async (request, response, next) => {
     try {
-      const { reportId } = reportIdParamsSchema.parse(request.params);
+      const reportId = parseReportIdParam(request.params);
       const officerId = response.locals.auth!.userId;
       const result = await this.service.createAlertFromVerifiedReport({
         reportId,
