@@ -60,6 +60,9 @@ async function selectReport(
   fireEvent.load(dashboard.getByAltText(/submitted evidence/i));
   return dashboard;
 }
+function confirmDecision(dashboard: ReturnType<typeof within>) {
+  fireEvent.click(dashboard.getByRole("button", { name: "Confirm decision" }));
+}
 
 describe("VerificationDashboard", () => {
   afterEach(cleanup);
@@ -71,6 +74,7 @@ describe("VerificationDashboard", () => {
     expect(screen.queryByRole("button", { name: "Verify" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /escalate|broadcast/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
   it("shows an empty queue", async () => {
     render(<VerificationDashboard api={api({ listPendingReports: async () => [] })} />);
@@ -92,6 +96,7 @@ describe("VerificationDashboard", () => {
 
     expect(dashboard.getByRole("button", { name: "Verify" })).toBeDisabled();
     expect(dashboard.getByRole("button", { name: "Reject" })).toBeDisabled();
+    expect(dashboard.queryByRole("dialog")).not.toBeInTheDocument();
 
     fireEvent.load(dashboard.getByAltText(/submitted evidence/i));
 
@@ -175,6 +180,10 @@ describe("VerificationDashboard", () => {
     const view = render(<VerificationDashboard api={client} />);
     const dashboard = await selectReport(view.container, /flood/i);
     fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
+    expect(dashboard.getByRole("dialog")).toHaveTextContent(report.id);
+    expect(dashboard.getByRole("dialog")).toHaveTextContent("VERIFIED");
+    expect(client.decideReport).not.toHaveBeenCalled();
+    confirmDecision(dashboard);
     await waitFor(() =>
       expect(client.decideReport).toHaveBeenCalledWith(
         report.id,
@@ -190,7 +199,12 @@ describe("VerificationDashboard", () => {
     fireEvent.click(dashboard.getByRole("button", { name: "Reject" }));
     const textarea = dashboard.getByRole("textbox", { name: /rejection reason/i });
     fireEvent.change(textarea, { target: { value: "  valid reason  " } });
-    fireEvent.click(dashboard.getByRole("button", { name: /confirm rejection/i }));
+    fireEvent.click(dashboard.getByRole("button", { name: /continue to confirmation/i }));
+    expect(dashboard.getByRole("dialog")).toHaveTextContent(report.id);
+    expect(dashboard.getByRole("dialog")).toHaveTextContent("REJECTED");
+    expect(dashboard.getByRole("dialog")).toHaveTextContent("valid reason");
+    expect(client.decideReport).not.toHaveBeenCalled();
+    confirmDecision(dashboard);
     await waitFor(() =>
       expect(client.decideReport).toHaveBeenCalledWith(
         report.id,
@@ -198,6 +212,27 @@ describe("VerificationDashboard", () => {
         expect.any(String),
       ),
     );
+  });
+
+  it("cancels either decision confirmation without submitting; rejected reason remains", async () => {
+    const client = api();
+    const view = render(<VerificationDashboard api={client} />);
+    const dashboard = await selectReport(view.container, /flood/i);
+
+    fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
+    fireEvent.click(dashboard.getByRole("button", { name: "Cancel" }));
+    expect(dashboard.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(client.decideReport).not.toHaveBeenCalled();
+
+    fireEvent.click(dashboard.getByRole("button", { name: "Reject" }));
+    const reasonInput = dashboard.getByRole("textbox", { name: /rejection reason/i });
+    fireEvent.change(reasonInput, { target: { value: "  A valid rejection reason  " } });
+    fireEvent.click(dashboard.getByRole("button", { name: /continue to confirmation/i }));
+    fireEvent.click(dashboard.getByRole("button", { name: "Cancel" }));
+
+    expect(dashboard.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(reasonInput).toHaveValue("  A valid rejection reason  ");
+    expect(client.decideReport).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -212,9 +247,10 @@ describe("VerificationDashboard", () => {
     fireEvent.change(dashboard.getByRole("textbox", { name: /rejection reason/i }), {
       target: { value },
     });
-    fireEvent.click(dashboard.getByRole("button", { name: /confirm rejection/i }));
+    fireEvent.click(dashboard.getByRole("button", { name: /continue to confirmation/i }));
 
     expect(await dashboard.findByRole("alert")).toHaveTextContent(/10 to 500 characters/i);
+    expect(dashboard.queryByRole("dialog")).not.toBeInTheDocument();
     expect(client.decideReport).not.toHaveBeenCalled();
     expect(dashboard.getByText("PENDING")).toBeInTheDocument();
   });
@@ -230,7 +266,8 @@ describe("VerificationDashboard", () => {
     fireEvent.change(dashboard.getByRole("textbox", { name: /rejection reason/i }), {
       target: { value: ` ${"x".repeat(length)} ` },
     });
-    fireEvent.click(dashboard.getByRole("button", { name: /confirm rejection/i }));
+    fireEvent.click(dashboard.getByRole("button", { name: /continue to confirmation/i }));
+    confirmDecision(dashboard);
 
     await waitFor(() =>
       expect(client.decideReport).toHaveBeenCalledWith(
@@ -248,13 +285,15 @@ describe("VerificationDashboard", () => {
     const dashboard = await selectReport(view.container, /flood/i);
 
     fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
+    expect(client.decideReport).not.toHaveBeenCalled();
+    confirmDecision(dashboard);
     await waitFor(() => expect(client.decideReport).toHaveBeenCalledTimes(1));
     expect(dashboard.getByRole("button", { name: "Verify" })).toBeDisabled();
     expect(dashboard.getByRole("button", { name: "Reject" })).toBeDisabled();
     expect(dashboard.getByText("PENDING")).toBeInTheDocument();
     expect(dashboard.queryByText(/successfully/i)).not.toBeInTheDocument();
 
-    fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
+    confirmDecision(dashboard);
     expect(client.decideReport).toHaveBeenCalledTimes(1);
     pendingDecision.resolve({});
     await dashboard.findByText(/verified successfully/i);
@@ -266,6 +305,7 @@ describe("VerificationDashboard", () => {
     const view = render(<VerificationDashboard api={client} />);
     const dashboard = await selectReport(view.container, /flood/i);
     fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
+    confirmDecision(dashboard);
 
     expect(await dashboard.findByText(/verified successfully/i)).toBeInTheDocument();
     expect(await dashboard.findByText(/no reports are awaiting/i)).toBeInTheDocument();
@@ -283,7 +323,8 @@ describe("VerificationDashboard", () => {
     fireEvent.change(dashboard.getByRole("textbox", { name: /rejection reason/i }), {
       target: { value: "A valid rejection reason" },
     });
-    fireEvent.click(dashboard.getByRole("button", { name: /confirm rejection/i }));
+    fireEvent.click(dashboard.getByRole("button", { name: /continue to confirmation/i }));
+    confirmDecision(dashboard);
 
     expect(await dashboard.findByText(/rejected successfully/i)).toBeInTheDocument();
     expect(await dashboard.findByText(/no reports are awaiting/i)).toBeInTheDocument();
@@ -302,6 +343,7 @@ describe("VerificationDashboard", () => {
     const view = render(<VerificationDashboard api={client} />);
     const dashboard = await selectReport(view.container, /flood/i);
     fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
+    confirmDecision(dashboard);
 
     expect(await dashboard.findByRole("alert")).toHaveTextContent(/unable to submit.*retry/i);
     expect(dashboard.queryByText(/unsafe backend detail/i)).not.toBeInTheDocument();
@@ -326,6 +368,7 @@ describe("VerificationDashboard", () => {
     const view = render(<VerificationDashboard api={client} />);
     const dashboard = await selectReport(view.container, /flood/i);
     fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
+    confirmDecision(dashboard);
 
     expect(await dashboard.findByRole("alert")).toHaveTextContent(/already been processed/i);
     expect(await dashboard.findByText(/no reports are awaiting/i)).toBeInTheDocument();
@@ -345,6 +388,7 @@ describe("VerificationDashboard", () => {
     const view = render(<VerificationDashboard api={client} />);
     const dashboard = await selectReport(view.container, /flood/i);
     fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
+    confirmDecision(dashboard);
 
     expect(await dashboard.findByRole("alert")).toHaveTextContent(/unable to submit.*retry/i);
     expect(dashboard.getByText("PENDING")).toBeInTheDocument();
@@ -353,7 +397,7 @@ describe("VerificationDashboard", () => {
     const firstKey = vi.mocked(client.decideReport).mock.calls[0]?.[2];
     expect(firstKey).toEqual(expect.any(String));
 
-    fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
+    confirmDecision(dashboard);
     await waitFor(() => expect(client.decideReport).toHaveBeenCalledTimes(2));
     expect(vi.mocked(client.decideReport).mock.calls[1]?.[2]).toBe(firstKey);
   });
@@ -368,13 +412,15 @@ describe("VerificationDashboard", () => {
     const view = render(<VerificationDashboard api={client} />);
     const dashboard = await selectReport(view.container, /flood/i);
     fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
+    confirmDecision(dashboard);
     await dashboard.findByRole("alert");
 
     fireEvent.click(dashboard.getByRole("button", { name: "Reject" }));
     fireEvent.change(dashboard.getByRole("textbox", { name: /rejection reason/i }), {
       target: { value: "A valid rejection reason" },
     });
-    fireEvent.click(dashboard.getByRole("button", { name: /confirm rejection/i }));
+    fireEvent.click(dashboard.getByRole("button", { name: /continue to confirmation/i }));
+    confirmDecision(dashboard);
     await waitFor(() => expect(client.decideReport).toHaveBeenCalledTimes(2));
 
     expect(vi.mocked(client.decideReport).mock.calls[1]?.[1]).toEqual({
@@ -398,11 +444,13 @@ describe("VerificationDashboard", () => {
     fireEvent.click(dashboard.getByRole("button", { name: "Reject" }));
     const reasonInput = dashboard.getByRole("textbox", { name: /rejection reason/i });
     fireEvent.change(reasonInput, { target: { value: "First valid reason" } });
-    fireEvent.click(dashboard.getByRole("button", { name: /confirm rejection/i }));
+    fireEvent.click(dashboard.getByRole("button", { name: /continue to confirmation/i }));
+    confirmDecision(dashboard);
     await dashboard.findByRole("alert");
 
     fireEvent.change(reasonInput, { target: { value: "Second valid reason" } });
-    fireEvent.click(dashboard.getByRole("button", { name: /confirm rejection/i }));
+    fireEvent.click(dashboard.getByRole("button", { name: /continue to confirmation/i }));
+    confirmDecision(dashboard);
     await waitFor(() => expect(client.decideReport).toHaveBeenCalledTimes(2));
 
     expect(vi.mocked(client.decideReport).mock.calls[1]?.[2]).not.toBe(
@@ -422,6 +470,7 @@ describe("VerificationDashboard", () => {
     const view = render(<VerificationDashboard api={client} />);
     const dashboard = await selectReport(view.container, /flood/i);
     fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
+    confirmDecision(dashboard);
     await dashboard.findByRole("alert");
     fireEvent.click(await dashboard.findByRole("button", { name: /landslide/i }));
     await dashboard.findByText(secondReview.description);
@@ -431,6 +480,7 @@ describe("VerificationDashboard", () => {
     expect(dashboard.getByRole("button", { name: "Verify" })).toBeEnabled();
     expect(dashboard.getByRole("button", { name: "Reject" })).toBeEnabled();
     fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
+    confirmDecision(dashboard);
     await waitFor(() => expect(client.decideReport).toHaveBeenCalledTimes(2));
 
     expect(vi.mocked(client.decideReport).mock.calls[1]?.[0]).toBe(secondReport.id);
