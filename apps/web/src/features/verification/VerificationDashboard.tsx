@@ -217,26 +217,40 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
   };
 
   return (
-    <section className="verification-dashboard" aria-label="Hazard verification dashboard">
-      <aside className="pending-queue">
-        <div className="section-kicker">DMC duty officer</div>
-        <h2>Pending hazard reports</h2>
-        {reports === null && !queueError && <p role="status">Loading pending reports…</p>}
-        {queueError && (
-          <div role="alert">
-            <p>Unable to load pending reports.</p>
-            <button onClick={loadQueue}>Retry queue</button>
+    <section className="verification-workspace" aria-label="Hazard verification dashboard">
+      <header className="verification-page-header">
+        <div>
+          <div className="section-kicker">DMC duty officer</div>
+          <h2>Verify Hazard Reports</h2>
+          <p>Review citizen hazard reports and make a verified or rejected decision.</p>
+        </div>
+      </header>
+      <div className="verification-dashboard">
+        <aside className="pending-queue" aria-labelledby="pending-queue-title">
+          <div className="panel-heading">
+            <div>
+              <div className="section-kicker">Review queue</div>
+              <h3 id="pending-queue-title">Pending reports</h3>
+            </div>
+            {reports !== null && <span className="queue-count">{reports.length}</span>}
           </div>
-        )}
-        {reports?.length === 0 && <p>No reports are awaiting officer review.</p>}
-        <ul>
-          {reports?.map((report) => (
-            <li key={report.id}>
-              <button
-                className={selectedId === report.id ? "selected" : ""}
-                disabled={escalationSubmitting}
-                onClick={() => {
-                  if (selectedId !== report.id) {
+          {reports === null && !queueError && <p role="status">Loading pending reports…</p>}
+          {queueError && (
+            <div role="alert">
+              <p>Unable to load pending reports.</p>
+              <button onClick={loadQueue}>Retry queue</button>
+            </div>
+          )}
+          {reports?.length === 0 && <p>No reports are awaiting officer review.</p>}
+          <ul>
+            {reports?.map((report) => (
+              <li key={report.id}>
+                <button
+                  className={selectedId === report.id ? "selected" : ""}
+                  aria-pressed={selectedId === report.id}
+                  disabled={escalationSubmitting}
+                  onClick={() => {
+                    if (selectedId === report.id) return;
                     setDecisionAttempt(undefined);
                     setConfirmation(undefined);
                     setDecisionLocked(false);
@@ -250,203 +264,255 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
                     setVerificationNotes("");
                     setFinalVerificationNotes(undefined);
                     setDecisionError(undefined);
-                  }
-                  setEvidenceLoaded(false);
-                  setEvidenceFailed(false);
-                  setSelectedId(report.id);
-                }}
-              >
-                <strong>{report.hazardType}</strong>
-                <span>{displayTime(report.submittedAt)}</span>
-                {report.requiresExtraReview && <em>Advisory: extra review</em>}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </aside>
-      <article className="report-review">
-        <div className="section-kicker">Report review</div>
-        <h2>
-          {review && review.status !== "PENDING"
-            ? "Report already processed"
-            : "Awaiting officer decision"}
-        </h2>
-        {success && <p role="status">{success}</p>}
-        {decisionError && <p role="alert">{decisionError}</p>}
-        {escalationError && <p role="alert">{escalationError}</p>}
-        {conflictReviewError && <p role="status">The current report status could not be loaded.</p>}
-        {!selectedId && <p>Select a pending report to review its evidence.</p>}
-        {selectedId && !review && !reviewError && !conflictReviewError && (
-          <p role="status">Loading report details…</p>
-        )}
-        {reviewError && (
-          <div role="alert">
-            <p>Report details are unavailable.</p>
-            <button onClick={() => setSelectedId(undefined)}>Choose another report</button>
-            <button onClick={() => setReviewAttempt((attempt) => attempt + 1)}>Retry review</button>
-          </div>
-        )}
-        {review && (
-          <>
-            <p className="status">{review.status}</p>
-            {review.status !== "PENDING" && (
-              <p role="status">
-                This report has already been processed. Final status: {review.status}.
-              </p>
-            )}
-            {review.status === "VERIFIED" && finalVerificationNotes && (
-              <p>Verification notes: {finalVerificationNotes}</p>
-            )}
-            {review.status === "VERIFIED" && (
-              <section aria-label="Draft alert escalation">
-                <p>
-                  Prepare a DRAFT alert for the broadcast workflow. This will not activate or
-                  broadcast the alert.
-                </p>
-                {escalationSubmitting && <p role="status">Preparing DRAFT alert…</p>}
-                {!escalationResult && (
-                  <button disabled={escalationSubmitting} onClick={() => void escalate()}>
-                    Escalate to Warning
-                  </button>
-                )}
-                {escalationResult?.reportId === review.id && (
-                  <div role="status">
-                    <p>
-                      {escalationResult.httpStatus === 201
-                        ? "A new DRAFT alert was prepared."
-                        : "An existing DRAFT alert was returned."}
-                    </p>
-                    <dl>
-                      <dt>Alert ID</dt>
-                      <dd>{escalationResult.draft.alertId}</dd>
-                      <dt>Source report ID</dt>
-                      <dd>{escalationResult.draft.sourceReportId}</dd>
-                      <dt>Status</dt>
-                      <dd>{escalationResult.draft.status}</dd>
-                      <dt>Version</dt>
-                      <dd>{escalationResult.draft.version}</dd>
-                    </dl>
-                  </div>
-                )}
-              </section>
-            )}
-            <h3>{review.hazardType}</h3>
-            {review.requiresExtraReview && (
-              <p className="advisory">
-                Advisory only: this report requires extra review. The officer remains responsible
-                for the decision.
-              </p>
-            )}
-            <dl>
-              <dt>Submitted</dt>
-              <dd>{displayTime(review.submittedAt)}</dd>
-              <dt>District</dt>
-              <dd>{review.location.districtId}</dd>
-              <dt>Location source</dt>
-              <dd>{review.location.source}</dd>
-              <dt>GPS</dt>
-              <dd>
-                {review.location.latitude}, {review.location.longitude}
-              </dd>
-              <dt>Address</dt>
-              <dd>{review.location.address ?? "No address provided"}</dd>
-            </dl>
-            <h3>Description</h3>
-            <p>{review.description}</p>
-            <h3>Evidence photo</h3>
-            <img
-              key={`${review.photoRef}-${evidenceAttempt}`}
-              src={review.photoRef}
-              alt={`Submitted evidence for ${review.hazardType}`}
-              hidden={evidenceFailed}
-              onLoad={() => {
-                setEvidenceLoaded(true);
-                setEvidenceFailed(false);
-              }}
-              onError={() => {
-                setEvidenceLoaded(false);
-                setEvidenceFailed(true);
-                setConfirmation(undefined);
-                setVerifying(false);
-              }}
-            />
-            {evidenceFailed && (
-              <p role="alert">
-                Evidence photo is unavailable. The report remains pending.{" "}
-                <button
-                  onClick={() => {
                     setEvidenceLoaded(false);
                     setEvidenceFailed(false);
-                    setEvidenceAttempt((attempt) => attempt + 1);
+                    setSelectedId(report.id);
                   }}
                 >
-                  Retry evidence
+                  <span className="queue-card-heading">
+                    <strong>{report.hazardType}</strong>
+                    <span className="status-badge status-badge--pending">Pending</span>
+                  </span>
+                  <span className="queue-report-id">Report · {report.id.slice(0, 8)}…</span>
+                  <span className="queue-submitted">
+                    Submitted {displayTime(report.submittedAt)}
+                  </span>
+                  {report.requiresExtraReview && <em>Advisory review</em>}
                 </button>
-              </p>
+              </li>
+            ))}
+          </ul>
+        </aside>
+        <article className="report-review" aria-labelledby="report-review-title">
+          <header className="review-header">
+            <div>
+              <div className="section-kicker">Selected report</div>
+              <h3 id="report-review-title">
+                {review?.hazardType ?? (selectedId ? "Loading report" : "Report review")}
+              </h3>
+              {review && <p className="review-report-id">Report ID · {review.id}</p>}
+            </div>
+            {review && (
+              <span className={`status-badge status-badge--${review.status.toLowerCase()}`}>
+                {review.status}
+              </span>
             )}
-            {review.status === "PENDING" && !decisionLocked && (
-              <section aria-label="Decision actions">
-                <button
-                  disabled={submitting || !evidenceLoaded}
-                  onClick={() => {
-                    setRejecting(false);
-                    setVerifying(true);
-                  }}
+          </header>
+          {review?.status === "PENDING" && (
+            <p className="review-prompt">Awaiting officer decision</p>
+          )}
+          {success && <p role="status">{success}</p>}
+          {decisionError && <p role="alert">{decisionError}</p>}
+          {escalationError && <p role="alert">{escalationError}</p>}
+          {conflictReviewError && (
+            <p role="status">The current report status could not be loaded.</p>
+          )}
+          {!selectedId && <p>Select a pending report to review its evidence.</p>}
+          {selectedId && !review && !reviewError && !conflictReviewError && (
+            <p role="status">Loading report details…</p>
+          )}
+          {reviewError && (
+            <div role="alert">
+              <p>Report details are unavailable.</p>
+              <button onClick={() => setSelectedId(undefined)}>Choose another report</button>
+              <button onClick={() => setReviewAttempt((attempt) => attempt + 1)}>
+                Retry review
+              </button>
+            </div>
+          )}
+          {review && (
+            <>
+              {review.status !== "PENDING" && (
+                <p
+                  className={`final-state final-state--${review.status.toLowerCase()}`}
+                  role="status"
                 >
-                  Verify
-                </button>
-                <button
-                  disabled={submitting || !evidenceLoaded}
-                  onClick={() => {
-                    setVerifying(false);
-                    setRejecting(true);
-                  }}
-                >
-                  Reject
-                </button>
-                {verifying && (
-                  <>
-                    <label>
-                      Optional verification notes
-                      <textarea
-                        value={verificationNotes}
-                        onChange={(event) => setVerificationNotes(event.target.value)}
+                  This report has already been processed. Final status: {review.status}.
+                </p>
+              )}
+              {review.status === "VERIFIED" && finalVerificationNotes && (
+                <p>Verification notes: {finalVerificationNotes}</p>
+              )}
+              {review.status === "VERIFIED" && (
+                <section aria-label="Draft alert escalation">
+                  <p>
+                    Prepare a DRAFT alert for the broadcast workflow. This will not activate or
+                    broadcast the alert.
+                  </p>
+                  {escalationSubmitting && <p role="status">Preparing DRAFT alert…</p>}
+                  {!escalationResult && (
+                    <button disabled={escalationSubmitting} onClick={() => void escalate()}>
+                      Escalate to Warning
+                    </button>
+                  )}
+                  {escalationResult?.reportId === review.id && (
+                    <div role="status">
+                      <p>
+                        {escalationResult.httpStatus === 201
+                          ? "A new DRAFT alert was prepared."
+                          : "An existing DRAFT alert was returned."}
+                      </p>
+                      <dl>
+                        <dt>Alert ID</dt>
+                        <dd>{escalationResult.draft.alertId}</dd>
+                        <dt>Source report ID</dt>
+                        <dd>{escalationResult.draft.sourceReportId}</dd>
+                        <dt>Status</dt>
+                        <dd>{escalationResult.draft.status}</dd>
+                        <dt>Version</dt>
+                        <dd>{escalationResult.draft.version}</dd>
+                      </dl>
+                    </div>
+                  )}
+                </section>
+              )}
+              {review.requiresExtraReview && (
+                <p className="advisory">
+                  Advisory only: this report requires extra review. The officer remains responsible
+                  for the decision.
+                </p>
+              )}
+              <div className="report-sections">
+                <section className="detail-card" aria-labelledby="report-details-title">
+                  <h4 id="report-details-title">Report details</h4>
+                  <dl className="detail-grid">
+                    <div>
+                      <dt>Submitted</dt>
+                      <dd>{displayTime(review.submittedAt)}</dd>
+                    </div>
+                    <div>
+                      <dt>District ID</dt>
+                      <dd>{review.location.districtId}</dd>
+                    </div>
+                    <div>
+                      <dt>Location source</dt>
+                      <dd>{review.location.source}</dd>
+                    </div>
+                  </dl>
+                </section>
+                <section className="detail-card" aria-labelledby="location-title">
+                  <h4 id="location-title">Location</h4>
+                  <dl className="detail-grid">
+                    <div>
+                      <dt>Coordinates</dt>
+                      <dd>
+                        {review.location.latitude}, {review.location.longitude}
+                      </dd>
+                    </div>
+                    <div className="detail-grid-wide">
+                      <dt>Address</dt>
+                      <dd>{review.location.address ?? "No address provided"}</dd>
+                    </div>
+                  </dl>
+                </section>
+                <section className="detail-card" aria-labelledby="description-title">
+                  <h4 id="description-title">Description</h4>
+                  <p>{review.description}</p>
+                </section>
+                <section className="detail-card evidence-card" aria-labelledby="evidence-title">
+                  <h4 id="evidence-title">Evidence photo</h4>
+                  <div
+                    className={`evidence-frame${evidenceFailed ? " evidence-frame--failed" : ""}`}
+                  >
+                    {!evidenceFailed && (
+                      <img
+                        key={`${review.photoRef}-${evidenceAttempt}`}
+                        src={review.photoRef}
+                        alt={`Submitted evidence for ${review.hazardType}`}
+                        onLoad={() => {
+                          setEvidenceLoaded(true);
+                          setEvidenceFailed(false);
+                        }}
+                        onError={() => {
+                          setEvidenceLoaded(false);
+                          setEvidenceFailed(true);
+                          setConfirmation(undefined);
+                          setVerifying(false);
+                        }}
                       />
-                    </label>
-                    <button
-                      disabled={submitting || !evidenceLoaded}
-                      onClick={() => requestConfirmation("VERIFIED")}
-                    >
-                      Continue to confirmation
-                    </button>
-                    <button disabled={submitting} onClick={() => setVerifying(false)}>
-                      Cancel verification
-                    </button>
-                  </>
-                )}
-                {rejecting && (
-                  <>
-                    <label>
-                      Rejection reason
-                      <textarea
-                        value={reason}
-                        onChange={(event) => setReason(event.target.value)}
-                      />
-                    </label>
-                    <button
-                      disabled={submitting || !evidenceLoaded}
-                      onClick={() => requestConfirmation("REJECTED")}
-                    >
-                      Continue to confirmation
-                    </button>
-                  </>
-                )}
-                {submitting && <p role="status">Submitting decision…</p>}
-              </section>
-            )}
-          </>
-        )}
-      </article>
+                    )}
+                    {evidenceFailed && (
+                      <div role="alert" className="evidence-error">
+                        <strong>Evidence photo is unavailable</strong>
+                        <span>The report remains PENDING. Decision actions are disabled.</span>
+                        <button
+                          onClick={() => {
+                            setEvidenceLoaded(false);
+                            setEvidenceFailed(false);
+                            setEvidenceAttempt((attempt) => attempt + 1);
+                          }}
+                        >
+                          Retry evidence
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </section>
+              </div>
+              {review.status === "PENDING" && !decisionLocked && (
+                <section aria-label="Decision actions">
+                  <button
+                    disabled={submitting || !evidenceLoaded}
+                    onClick={() => {
+                      setRejecting(false);
+                      setVerifying(true);
+                    }}
+                  >
+                    Verify
+                  </button>
+                  <button
+                    disabled={submitting || !evidenceLoaded}
+                    onClick={() => {
+                      setVerifying(false);
+                      setRejecting(true);
+                    }}
+                  >
+                    Reject
+                  </button>
+                  {verifying && (
+                    <>
+                      <label>
+                        Optional verification notes
+                        <textarea
+                          value={verificationNotes}
+                          onChange={(event) => setVerificationNotes(event.target.value)}
+                        />
+                      </label>
+                      <button
+                        disabled={submitting || !evidenceLoaded}
+                        onClick={() => requestConfirmation("VERIFIED")}
+                      >
+                        Continue to confirmation
+                      </button>
+                      <button disabled={submitting} onClick={() => setVerifying(false)}>
+                        Cancel verification
+                      </button>
+                    </>
+                  )}
+                  {rejecting && (
+                    <>
+                      <label>
+                        Rejection reason
+                        <textarea
+                          value={reason}
+                          onChange={(event) => setReason(event.target.value)}
+                        />
+                      </label>
+                      <button
+                        disabled={submitting || !evidenceLoaded}
+                        onClick={() => requestConfirmation("REJECTED")}
+                      >
+                        Continue to confirmation
+                      </button>
+                    </>
+                  )}
+                  {submitting && <p role="status">Submitting decision…</p>}
+                </section>
+              )}
+            </>
+          )}
+        </article>
+      </div>
       {confirmation && review && (
         <div
           role="dialog"
