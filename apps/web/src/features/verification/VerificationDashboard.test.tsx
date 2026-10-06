@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { VerificationDashboard } from "./VerificationDashboard";
 import type { VerificationApi } from "./verification-api";
@@ -22,12 +22,42 @@ const review = {
     source: "GPS" as const,
   },
 };
+const secondReport = {
+  ...report,
+  id: "40000000-0000-4000-8000-000000000002",
+  hazardType: "LANDSLIDE",
+};
+const secondReview = {
+  ...review,
+  ...secondReport,
+  description: "A landslide has blocked the road.",
+};
 function api(overrides: Partial<VerificationApi> = {}): VerificationApi {
   return {
     listPendingReports: vi.fn(async () => [report]),
     getReportForReview: vi.fn(async () => review),
+    decideReport: vi.fn(async () => ({})),
     ...overrides,
   };
+}
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+async function selectReport(
+  container: HTMLElement,
+  name: RegExp,
+  description: string = review.description,
+) {
+  const dashboard = within(container);
+  fireEvent.click(await dashboard.findByRole("button", { name }));
+  await dashboard.findByText(description);
+  return dashboard;
 }
 
 describe("VerificationDashboard", () => {
@@ -37,9 +67,9 @@ describe("VerificationDashboard", () => {
     expect(screen.getByText(/loading pending/i)).toBeInTheDocument();
     expect(await screen.findByText("FLOOD")).toBeInTheDocument();
     expect(screen.queryByText(/^VERIFIED$/)).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /verify|reject|escalate/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Verify" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /escalate|broadcast/i })).not.toBeInTheDocument();
   });
   it("shows an empty queue", async () => {
     render(<VerificationDashboard api={api({ listPendingReports: async () => [] })} />);
@@ -66,19 +96,287 @@ describe("VerificationDashboard", () => {
     expect(await screen.findByText(/unable to load pending/i)).toBeInTheDocument();
   });
   it("retries the same evidence without changing the pending review state", async () => {
-    render(<VerificationDashboard api={api()} />);
-    fireEvent.click((await screen.findAllByRole("button", { name: /flood/i })).at(-1)!);
-    const evidence = (await screen.findAllByAltText(/submitted evidence/i)).at(-1)!;
+    const view = render(<VerificationDashboard api={api()} />);
+    const dashboard = within(view.container);
+    fireEvent.click(await dashboard.findByRole("button", { name: /flood/i }));
+    const evidence = await dashboard.findByAltText(/submitted evidence/i);
     fireEvent.error(evidence);
-    expect(await screen.findByText(/evidence photo is unavailable/i)).toBeInTheDocument();
-    expect(screen.getByText("Awaiting officer decision")).toBeInTheDocument();
-    expect(screen.getByText("PENDING")).toBeInTheDocument();
+    expect(await dashboard.findByText(/evidence photo is unavailable/i)).toBeInTheDocument();
+    expect(dashboard.getByText("Awaiting officer decision")).toBeInTheDocument();
+    expect(dashboard.getByText("PENDING")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /verify|reject|escalate/i }),
+      dashboard.queryByRole("button", { name: /escalate|broadcast/i }),
     ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /retry evidence/i }));
-    expect(screen.queryByText(/evidence photo is unavailable/i)).not.toBeInTheDocument();
-    expect(screen.getByAltText(/submitted evidence/i)).toHaveAttribute("src", "photo.jpg");
-    expect(screen.getByText(review.description)).toBeInTheDocument();
+    fireEvent.click(dashboard.getByRole("button", { name: /retry evidence/i }));
+    expect(dashboard.queryByText(/evidence photo is unavailable/i)).not.toBeInTheDocument();
+    expect(dashboard.getByAltText(/submitted evidence/i)).toHaveAttribute("src", "photo.jpg");
+    expect(dashboard.getByText(review.description)).toBeInTheDocument();
+  });
+  it("submits a verified decision without an officer identity", async () => {
+    const client = api();
+    const view = render(<VerificationDashboard api={client} />);
+    const dashboard = within(view.container);
+    fireEvent.click(await dashboard.findByRole("button", { name: /flood/i }));
+    await dashboard.findByText(review.description);
+    fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
+    await waitFor(() =>
+      expect(client.decideReport).toHaveBeenCalledWith(
+        report.id,
+        { result: "VERIFIED" },
+        expect.any(String),
+      ),
+    );
+  });
+  it("submits a rejected decision without an officer identity", async () => {
+    const client = api();
+    const view = render(<VerificationDashboard api={client} />);
+    const dashboard = within(view.container);
+    fireEvent.click(await dashboard.findByRole("button", { name: /flood/i }));
+    await dashboard.findByText(review.description);
+    fireEvent.click(dashboard.getByRole("button", { name: "Reject" }));
+    const textarea = dashboard.getByRole("textbox", { name: /rejection reason/i });
+    fireEvent.change(textarea, { target: { value: "  valid reason  " } });
+    fireEvent.click(dashboard.getByRole("button", { name: /confirm rejection/i }));
+    await waitFor(() =>
+      expect(client.decideReport).toHaveBeenCalledWith(
+        report.id,
+        { result: "REJECTED", reason: "valid reason" },
+        expect.any(String),
+      ),
+    );
+  });
+
+  it.each([
+    { label: "empty", value: "" },
+    { label: "fewer than 10 trimmed characters", value: " 123456789 " },
+    { label: "more than 500 trimmed characters", value: ` ${"x".repeat(501)} ` },
+  ])("blocks a $label rejection reason", async ({ value }) => {
+    const client = api();
+    const view = render(<VerificationDashboard api={client} />);
+    const dashboard = await selectReport(view.container, /flood/i);
+    fireEvent.click(dashboard.getByRole("button", { name: "Reject" }));
+    fireEvent.change(dashboard.getByRole("textbox", { name: /rejection reason/i }), {
+      target: { value },
+    });
+    fireEvent.click(dashboard.getByRole("button", { name: /confirm rejection/i }));
+
+    expect(await dashboard.findByRole("alert")).toHaveTextContent(/10 to 500 characters/i);
+    expect(client.decideReport).not.toHaveBeenCalled();
+    expect(dashboard.getByText("PENDING")).toBeInTheDocument();
+  });
+
+  it.each([
+    { length: 10, label: "exactly 10" },
+    { length: 500, label: "exactly 500" },
+  ])("accepts a rejection reason with $label trimmed characters", async ({ length }) => {
+    const client = api();
+    const view = render(<VerificationDashboard api={client} />);
+    const dashboard = await selectReport(view.container, /flood/i);
+    fireEvent.click(dashboard.getByRole("button", { name: "Reject" }));
+    fireEvent.change(dashboard.getByRole("textbox", { name: /rejection reason/i }), {
+      target: { value: ` ${"x".repeat(length)} ` },
+    });
+    fireEvent.click(dashboard.getByRole("button", { name: /confirm rejection/i }));
+
+    await waitFor(() =>
+      expect(client.decideReport).toHaveBeenCalledWith(
+        report.id,
+        { result: "REJECTED", reason: "x".repeat(length) },
+        expect.any(String),
+      ),
+    );
+  });
+
+  it("prevents duplicate submissions while a decision is pending", async () => {
+    const pendingDecision = deferred<unknown>();
+    const client = api({ decideReport: vi.fn(() => pendingDecision.promise) });
+    const view = render(<VerificationDashboard api={client} />);
+    const dashboard = await selectReport(view.container, /flood/i);
+
+    fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
+    await waitFor(() => expect(client.decideReport).toHaveBeenCalledTimes(1));
+    expect(dashboard.getByRole("button", { name: "Verify" })).toBeDisabled();
+    expect(dashboard.getByRole("button", { name: "Reject" })).toBeDisabled();
+    expect(dashboard.getByText("PENDING")).toBeInTheDocument();
+    expect(dashboard.queryByText(/successfully/i)).not.toBeInTheDocument();
+
+    fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
+    expect(client.decideReport).toHaveBeenCalledTimes(1);
+    pendingDecision.resolve({});
+    await dashboard.findByText(/verified successfully/i);
+  });
+
+  it("refreshes the queue and clears active review after successful Verify", async () => {
+    const listPendingReports = vi.fn().mockResolvedValueOnce([report]).mockResolvedValueOnce([]);
+    const client = api({ listPendingReports });
+    const view = render(<VerificationDashboard api={client} />);
+    const dashboard = await selectReport(view.container, /flood/i);
+    fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
+
+    expect(await dashboard.findByText(/verified successfully/i)).toBeInTheDocument();
+    expect(await dashboard.findByText(/no reports are awaiting/i)).toBeInTheDocument();
+    expect(dashboard.queryByText(review.description)).not.toBeInTheDocument();
+    expect(dashboard.getByText(/select a pending report/i)).toBeInTheDocument();
+    expect(listPendingReports).toHaveBeenCalledTimes(2);
+  });
+
+  it("refreshes the queue after successful Reject", async () => {
+    const listPendingReports = vi.fn().mockResolvedValueOnce([report]).mockResolvedValueOnce([]);
+    const client = api({ listPendingReports });
+    const view = render(<VerificationDashboard api={client} />);
+    const dashboard = await selectReport(view.container, /flood/i);
+    fireEvent.click(dashboard.getByRole("button", { name: "Reject" }));
+    fireEvent.change(dashboard.getByRole("textbox", { name: /rejection reason/i }), {
+      target: { value: "A valid rejection reason" },
+    });
+    fireEvent.click(dashboard.getByRole("button", { name: /confirm rejection/i }));
+
+    expect(await dashboard.findByText(/rejected successfully/i)).toBeInTheDocument();
+    expect(await dashboard.findByText(/no reports are awaiting/i)).toBeInTheDocument();
+    expect(listPendingReports).toHaveBeenCalledTimes(2);
+  });
+
+  it("handles a backend 422 safely without finalizing the report", async () => {
+    const client = api({
+      decideReport: vi.fn(async () => {
+        throw {
+          status: 422,
+          body: { error: { code: "VALIDATION_ERROR", message: "unsafe backend detail" } },
+        };
+      }),
+    });
+    const view = render(<VerificationDashboard api={client} />);
+    const dashboard = await selectReport(view.container, /flood/i);
+    fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
+
+    expect(await dashboard.findByRole("alert")).toHaveTextContent(/unable to submit.*retry/i);
+    expect(dashboard.queryByText(/unsafe backend detail/i)).not.toBeInTheDocument();
+    expect(dashboard.getByText("PENDING")).toBeInTheDocument();
+    expect(dashboard.getByText("Awaiting officer decision")).toBeInTheDocument();
+    expect(dashboard.queryByText(/verified successfully/i)).not.toBeInTheDocument();
+  });
+
+  it("handles REPORT_ALREADY_PROCESSED by refreshing without applying a decision", async () => {
+    const listPendingReports = vi.fn().mockResolvedValueOnce([report]).mockResolvedValueOnce([]);
+    const client = api({
+      listPendingReports,
+      decideReport: vi.fn(async () => {
+        throw {
+          status: 409,
+          body: {
+            error: { code: "REPORT_ALREADY_PROCESSED", message: "Already processed" },
+          },
+        };
+      }),
+    });
+    const view = render(<VerificationDashboard api={client} />);
+    const dashboard = await selectReport(view.container, /flood/i);
+    fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
+
+    expect(await dashboard.findByRole("alert")).toHaveTextContent(/already been processed/i);
+    expect(await dashboard.findByText(/no reports are awaiting/i)).toBeInTheDocument();
+    expect(dashboard.queryByText(review.description)).not.toBeInTheDocument();
+    expect(dashboard.queryByText(/verified successfully/i)).not.toBeInTheDocument();
+    expect(client.decideReport).toHaveBeenCalledTimes(1);
+    expect(listPendingReports).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a network-failed attempt pending and reuses its key on exact retry", async () => {
+    const client = api({
+      decideReport: vi
+        .fn()
+        .mockRejectedValueOnce(new Error("network unavailable"))
+        .mockResolvedValueOnce({}),
+    });
+    const view = render(<VerificationDashboard api={client} />);
+    const dashboard = await selectReport(view.container, /flood/i);
+    fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
+
+    expect(await dashboard.findByRole("alert")).toHaveTextContent(/unable to submit.*retry/i);
+    expect(dashboard.getByText("PENDING")).toBeInTheDocument();
+    expect(dashboard.getByText("Awaiting officer decision")).toBeInTheDocument();
+    expect(dashboard.queryByText(/verified successfully/i)).not.toBeInTheDocument();
+    const firstKey = vi.mocked(client.decideReport).mock.calls[0]?.[2];
+    expect(firstKey).toEqual(expect.any(String));
+
+    fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
+    await waitFor(() => expect(client.decideReport).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(client.decideReport).mock.calls[1]?.[2]).toBe(firstKey);
+  });
+
+  it("uses a new key when a failed VERIFIED attempt changes to REJECTED", async () => {
+    const client = api({
+      decideReport: vi
+        .fn()
+        .mockRejectedValueOnce(new Error("server unavailable"))
+        .mockResolvedValueOnce({}),
+    });
+    const view = render(<VerificationDashboard api={client} />);
+    const dashboard = await selectReport(view.container, /flood/i);
+    fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
+    await dashboard.findByRole("alert");
+
+    fireEvent.click(dashboard.getByRole("button", { name: "Reject" }));
+    fireEvent.change(dashboard.getByRole("textbox", { name: /rejection reason/i }), {
+      target: { value: "A valid rejection reason" },
+    });
+    fireEvent.click(dashboard.getByRole("button", { name: /confirm rejection/i }));
+    await waitFor(() => expect(client.decideReport).toHaveBeenCalledTimes(2));
+
+    expect(vi.mocked(client.decideReport).mock.calls[1]?.[1]).toEqual({
+      result: "REJECTED",
+      reason: "A valid rejection reason",
+    });
+    expect(vi.mocked(client.decideReport).mock.calls[1]?.[2]).not.toBe(
+      vi.mocked(client.decideReport).mock.calls[0]?.[2],
+    );
+  });
+
+  it("uses a new key when the normalized reason changes after a failed rejection", async () => {
+    const client = api({
+      decideReport: vi
+        .fn()
+        .mockRejectedValueOnce(new Error("server unavailable"))
+        .mockResolvedValueOnce({}),
+    });
+    const view = render(<VerificationDashboard api={client} />);
+    const dashboard = await selectReport(view.container, /flood/i);
+    fireEvent.click(dashboard.getByRole("button", { name: "Reject" }));
+    const reasonInput = dashboard.getByRole("textbox", { name: /rejection reason/i });
+    fireEvent.change(reasonInput, { target: { value: "First valid reason" } });
+    fireEvent.click(dashboard.getByRole("button", { name: /confirm rejection/i }));
+    await dashboard.findByRole("alert");
+
+    fireEvent.change(reasonInput, { target: { value: "Second valid reason" } });
+    fireEvent.click(dashboard.getByRole("button", { name: /confirm rejection/i }));
+    await waitFor(() => expect(client.decideReport).toHaveBeenCalledTimes(2));
+
+    expect(vi.mocked(client.decideReport).mock.calls[1]?.[2]).not.toBe(
+      vi.mocked(client.decideReport).mock.calls[0]?.[2],
+    );
+  });
+
+  it("uses a new key after selecting a different report", async () => {
+    const client = api({
+      listPendingReports: vi.fn(async () => [report, secondReport]),
+      getReportForReview: vi.fn(async (id) => (id === report.id ? review : secondReview)),
+      decideReport: vi
+        .fn()
+        .mockRejectedValueOnce(new Error("network unavailable"))
+        .mockResolvedValueOnce({}),
+    });
+    const view = render(<VerificationDashboard api={client} />);
+    const dashboard = await selectReport(view.container, /flood/i);
+    fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
+    await dashboard.findByRole("alert");
+    fireEvent.click(await dashboard.findByRole("button", { name: /landslide/i }));
+    await dashboard.findByText(secondReview.description);
+    fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
+    await waitFor(() => expect(client.decideReport).toHaveBeenCalledTimes(2));
+
+    expect(vi.mocked(client.decideReport).mock.calls[1]?.[0]).toBe(secondReport.id);
+    expect(vi.mocked(client.decideReport).mock.calls[1]?.[2]).not.toBe(
+      vi.mocked(client.decideReport).mock.calls[0]?.[2],
+    );
   });
 });
