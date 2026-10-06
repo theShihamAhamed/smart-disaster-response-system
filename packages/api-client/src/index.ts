@@ -113,3 +113,7 @@ export function createHttpClient({
 
   return { get, getHealth, patch, post } as const;
 }
+
+export type HttpClient = ReturnType<typeof createHttpClient>;
+
+export * from "./relief.js";

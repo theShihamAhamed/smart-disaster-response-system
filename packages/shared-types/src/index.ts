@@ -1,5 +1,7 @@
 import type { UserRole } from "@disaster/domain";
 
+export * from "./relief.js";
+
 export type FieldErrors = Readonly<Record<string, readonly string[]>>;
 
 export interface ApiErrorBody {

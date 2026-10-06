@@ -193,8 +193,8 @@ Header: `Idempotency-Key: <allocation-command-uuid>`
 {
   "requestVersion": 4,
   "items": [
-    { "requestItemId": "uuid", "quantity": 100 },
-    { "requestItemId": "uuid", "quantity": 8 }
+    { "requestItemId": "uuid", "allocateQty": 100 },
+    { "requestItemId": "uuid", "allocateQty": 8 }
   ],
   "shortages": [
     {
@@ -207,7 +207,7 @@ Header: `Idempotency-Key: <allocation-command-uuid>`
 }
 ```
 
-The client sends partner selections, not trusted shortage quantities. The server recalculates every shortage after re-reading stock and outstanding demand.
+The client sends partner selections, not trusted shortage quantities. The server recalculates every shortage after re-reading stock and outstanding demand. Idempotency is scoped by the trusted officer ID plus the `Idempotency-Key`; `requestVersion` is an optimistic-concurrency precondition and is excluded from canonical business-intent comparison.
 
 Response `201`, or `200` for an idempotent repeat:
 
