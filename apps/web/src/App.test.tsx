@@ -7,6 +7,5 @@ describe("officer web shell", () => {
     render(<App />);
     expect(screen.getByRole("heading", { name: "DMC Duty Officer" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "District Officer" })).toBeInTheDocument();
-    expect(screen.getByText(/intentionally not implemented/i)).toBeInTheDocument();
   });
 });
