@@ -53,10 +53,13 @@ export function createApp(dependencies: AppDependencies = {}) {
   const verificationService =
     dependencies.verificationService ??
     new HazardVerificationService(new PrismaHazardVerificationRepository(prisma));
-  app.use(`${API_BASE_PATH}/verification`, createVerificationRouter(verificationService));
   const broadcastService =
     dependencies.broadcastService ??
     new HazardBroadcastService(new PrismaHazardBroadcastRepository(prisma));
+  app.use(
+    `${API_BASE_PATH}/verification`,
+    createVerificationRouter(verificationService, broadcastService),
+  );
   app.use(`${API_BASE_PATH}/alerts`, createAlertRouter(broadcastService));
 
   app.use((_request, response) => {

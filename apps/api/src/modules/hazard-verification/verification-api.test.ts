@@ -1,10 +1,26 @@
 import {
+  AlertStatus,
   HazardType,
   LocationSource,
   ReportStatus,
   UserRole,
   VerificationResult,
 } from "@disaster/domain";
+import { HazardBroadcastService } from "../hazard-broadcast/alert.service.js";
+import type {
+  ActivateAlertCommand,
+  AlertPreviewData,
+  AlertRecord,
+  BroadcastAlertResult,
+  CreateAlertPersistenceResult,
+  CreateInitialAlertCommand,
+  CreateReplacementDraftCommand,
+  FindSimilarActiveAlertsQuery,
+  HazardBroadcastRepository,
+  NotificationDeliveryRecord,
+  SourceReport,
+  UpdateDraftAlertCommand,
+} from "../hazard-broadcast/types.js";
 import type { DevelopmentAuthUser, ResolveDevelopmentAuthUser } from "../../development-auth.js";
 import { createApp } from "../../app.js";
 import type {
@@ -24,6 +40,7 @@ const citizenId = "10000000-0000-4000-8000-000000000001";
 const reportId = "40000000-0000-4000-8000-000000000001";
 const unknownId = "10000000-0000-4000-8000-000000000099";
 const commandKey = "60000000-0000-4000-8000-000000000001";
+const alertId = "50000000-0000-4000-8000-000000000001";
 
 const pendingReport: PendingReport = {
   id: reportId,
@@ -67,6 +84,10 @@ class VerificationApiRepository implements HazardVerificationRepository {
   public commands: DecisionCommand[] = [];
   public constructor(private status: ReportStatus | undefined = ReportStatus.PENDING) {}
 
+  public statusForReport(id: string): ReportStatus | null {
+    return id === reportId ? (this.status ?? null) : null;
+  }
+
   public async listPendingReports(): Promise<readonly PendingReport[]> {
     return this.status === ReportStatus.PENDING ? [pendingReport] : [];
   }
@@ -91,16 +112,119 @@ class VerificationApiRepository implements HazardVerificationRepository {
   }
 }
 
+class VerificationBroadcastRepository implements HazardBroadcastRepository {
+  public readonly initialAlerts = new Map<string, AlertRecord>();
+  public createdInitialAlertCount = 0;
+  public activationCalls = 0;
+  public failOnCreate = false;
+
+  public constructor(private readonly reports: VerificationApiRepository) {}
+
+  public async findSourceReport(id: string): Promise<SourceReport | null> {
+    const status = this.reports.statusForReport(id);
+    return status ? { id, status, hazardType: HazardType.FLOOD } : null;
+  }
+
+  public async findAlertById(id: string): Promise<AlertRecord | null> {
+    return [...this.initialAlerts.values()].find((alert) => alert.id === id) ?? null;
+  }
+
+  public async findInitialAlertForReport(id: string): Promise<AlertRecord | null> {
+    return this.initialAlerts.get(id) ?? null;
+  }
+
+  public async findAlertPreview(id: string): Promise<AlertPreviewData | null> {
+    const alert = await this.findAlertById(id);
+    return alert ? { alert, targetZones: [] } : null;
+  }
+
+  public async findSimilarActiveAlerts(
+    query: FindSimilarActiveAlertsQuery,
+  ): Promise<AlertRecord[]> {
+    void query;
+    return [];
+  }
+
+  public async createInitialAlert(
+    command: CreateInitialAlertCommand,
+  ): Promise<CreateAlertPersistenceResult> {
+    const existing = this.initialAlerts.get(command.sourceReportId);
+    if (existing) return { kind: "EXISTING", alert: existing };
+    if (this.failOnCreate) throw new Error("private persistence details");
+
+    const alert: AlertRecord = {
+      id: alertId,
+      sourceReportId: command.sourceReportId,
+      createdByOfficerId: command.createdByOfficerId,
+      hazardType: command.hazardType,
+      severity: command.severity,
+      message: command.message,
+      safetyInstructions: command.safetyInstructions,
+      status: command.status,
+      version: command.version,
+      parentAlertId: command.parentAlertId,
+      targetZoneIds: [],
+      issuedAt: null,
+      cancelledAt: null,
+      cancellationReason: null,
+    };
+    this.initialAlerts.set(command.sourceReportId, alert);
+    this.createdInitialAlertCount += 1;
+    return { kind: "CREATED", alert };
+  }
+
+  public async updateDraftAlert(command: UpdateDraftAlertCommand): Promise<AlertRecord> {
+    const existing = await this.findAlertById(command.alertId);
+    if (!existing) throw new Error("Test alert does not exist.");
+    const updated = {
+      ...existing,
+      severity: command.severity,
+      message: command.message,
+      safetyInstructions: command.safetyInstructions,
+      targetZoneIds: command.targetZoneIds,
+    };
+    this.initialAlerts.set(updated.sourceReportId, updated);
+    return updated;
+  }
+
+  public async activateAlert(command: ActivateAlertCommand): Promise<BroadcastAlertResult> {
+    this.activationCalls += 1;
+    const alert = await this.findAlertById(command.alertId);
+    if (!alert) throw new Error("Test alert does not exist.");
+    const deliveries: NotificationDeliveryRecord[] = [];
+    return { alert, deliveries };
+  }
+
+  public async createReplacementDraft(
+    command: CreateReplacementDraftCommand,
+  ): Promise<AlertRecord> {
+    const parent = await this.findAlertById(command.parentAlertId);
+    if (!parent) throw new Error("Test parent alert does not exist.");
+    const replacement: AlertRecord = {
+      ...parent,
+      id: `${alertId}-replacement`,
+      createdByOfficerId: command.createdByOfficerId,
+      version: command.version,
+      parentAlertId: command.parentAlertId,
+      status: AlertStatus.DRAFT,
+    };
+    return replacement;
+  }
+}
+
 function createVerificationApp(repository = new VerificationApiRepository()) {
   const resolveDevelopmentAuthUser: ResolveDevelopmentAuthUser = async (id) => users[id] ?? null;
+  const broadcastRepository = new VerificationBroadcastRepository(repository);
   return {
     repository,
+    broadcastRepository,
     app: createApp({
       resolveDevelopmentAuthUser,
       verificationService: new HazardVerificationService(
         repository,
         () => new Date("2026-10-05T10:00:00.000Z"),
       ),
+      broadcastService: new HazardBroadcastService(broadcastRepository),
     }),
   };
 }
@@ -110,6 +234,12 @@ function officerRequest(app: ReturnType<typeof createVerificationApp>["app"]) {
     get: (path: string) => request(app).get(path).set("X-Dev-User-Id", officerId),
     post: (path: string) => request(app).post(path).set("X-Dev-User-Id", officerId),
   };
+}
+
+function escalationRequest(app: ReturnType<typeof createVerificationApp>["app"]) {
+  return officerRequest(app)
+    .post(`/api/v1/verification/reports/${reportId}/escalations`)
+    .set("Idempotency-Key", commandKey);
 }
 
 beforeEach(() => {
@@ -227,5 +357,157 @@ describe("verification API", () => {
       .set("X-Dev-User-Id", citizenId);
     expect(forbidden.status).toBe(403);
     expect(forbidden.body.error.code).toBe("FORBIDDEN");
+  });
+
+  it("escalates a VERIFIED report to a linked DRAFT without broadcast permission", async () => {
+    const { app, repository, broadcastRepository } = createVerificationApp(
+      new VerificationApiRepository(ReportStatus.VERIFIED),
+    );
+    const response = await escalationRequest(app);
+
+    expect(response.status).toBe(201);
+    expect(response.body).toEqual({
+      alertId,
+      sourceReportId: reportId,
+      status: AlertStatus.DRAFT,
+      version: 1,
+    });
+    expect(broadcastRepository.initialAlerts.get(reportId)).toMatchObject({
+      id: alertId,
+      sourceReportId: reportId,
+      status: AlertStatus.DRAFT,
+      parentAlertId: null,
+    });
+    expect(broadcastRepository.initialAlerts.get(reportId)?.createdByOfficerId).toBe(officerId);
+    expect(broadcastRepository.activationCalls).toBe(0);
+    expect(repository.statusForReport(reportId)).toBe(ReportStatus.VERIFIED);
+  });
+
+  it("rejects client-supplied officerId and uses the authenticated identity", async () => {
+    const { app, broadcastRepository } = createVerificationApp(
+      new VerificationApiRepository(ReportStatus.VERIFIED),
+    );
+    const bodyIdentity = await escalationRequest(app).send({ officerId: citizenId });
+    expect(bodyIdentity.status).toBe(422);
+    expect(bodyIdentity.body.error.code).toBe("VALIDATION_ERROR");
+
+    const queryIdentity = await escalationRequest(app).query({ officerId: citizenId });
+    expect(queryIdentity.status).toBe(422);
+    expect(queryIdentity.body.error.code).toBe("VALIDATION_ERROR");
+
+    const headerIdentity = await escalationRequest(app).set("officerId", citizenId);
+    expect(headerIdentity.status).toBe(201);
+    expect(broadcastRepository.initialAlerts.get(reportId)?.createdByOfficerId).toBe(officerId);
+  });
+
+  it("rejects a missing escalation Idempotency-Key", async () => {
+    const { app } = createVerificationApp(new VerificationApiRepository(ReportStatus.VERIFIED));
+    const response = await officerRequest(app).post(
+      `/api/v1/verification/reports/${reportId}/escalations`,
+    );
+
+    expect(response.status).toBe(422);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("rejects a blank escalation Idempotency-Key", async () => {
+    const { app } = createVerificationApp(new VerificationApiRepository(ReportStatus.VERIFIED));
+    const response = await officerRequest(app)
+      .post(`/api/v1/verification/reports/${reportId}/escalations`)
+      .set("Idempotency-Key", "   ");
+
+    expect(response.status).toBe(422);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("rejects an invalid report UUID as a validation error", async () => {
+    const { app } = createVerificationApp(new VerificationApiRepository(ReportStatus.VERIFIED));
+    const response = await officerRequest(app)
+      .post("/api/v1/verification/reports/not-a-uuid/escalations")
+      .set("Idempotency-Key", commandKey);
+
+    expect(response.status).toBe(422);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("rejects an escalation request from a user with the wrong role", async () => {
+    const { app } = createVerificationApp(new VerificationApiRepository(ReportStatus.VERIFIED));
+    const response = await request(app)
+      .post(`/api/v1/verification/reports/${reportId}/escalations`)
+      .set("X-Dev-User-Id", citizenId)
+      .set("Idempotency-Key", commandKey);
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe("FORBIDDEN");
+  });
+
+  it("rejects an unauthenticated escalation request", async () => {
+    const { app } = createVerificationApp(new VerificationApiRepository(ReportStatus.VERIFIED));
+    const response = await request(app)
+      .post(`/api/v1/verification/reports/${reportId}/escalations`)
+      .set("Idempotency-Key", commandKey);
+
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe("UNAUTHENTICATED");
+  });
+
+  it.each([ReportStatus.PENDING, ReportStatus.REJECTED])(
+    "does not escalate a %s report",
+    async (status) => {
+      const { app, broadcastRepository, repository } = createVerificationApp(
+        new VerificationApiRepository(status),
+      );
+      const response = await escalationRequest(app);
+
+      expect(response.status).toBe(409);
+      expect(response.body.error.code).toBe("REPORT_NOT_VERIFIED");
+      expect(broadcastRepository.initialAlerts.size).toBe(0);
+      expect(repository.statusForReport(reportId)).toBe(status);
+    },
+  );
+
+  it("handles an unknown report safely during escalation", async () => {
+    const { app, broadcastRepository } = createVerificationApp(
+      new VerificationApiRepository(ReportStatus.VERIFIED),
+    );
+    const response = await officerRequest(app)
+      .post(`/api/v1/verification/reports/${unknownId}/escalations`)
+      .set("Idempotency-Key", commandKey);
+
+    expect(response.status).toBe(404);
+    expect(response.body.error).toMatchObject({ code: "NOT_FOUND", details: {} });
+    expect(broadcastRepository.initialAlerts.size).toBe(0);
+  });
+
+  it("returns the existing initial draft on repeated escalation without duplicates", async () => {
+    const { app, broadcastRepository } = createVerificationApp(
+      new VerificationApiRepository(ReportStatus.VERIFIED),
+    );
+    const first = await escalationRequest(app);
+    const repeated = await officerRequest(app)
+      .post(`/api/v1/verification/reports/${reportId}/escalations`)
+      .set("Idempotency-Key", "a-distinct-non-empty-retry-key");
+
+    expect(first.status).toBe(201);
+    expect(repeated.status).toBe(200);
+    expect(repeated.body.alertId).toBe(first.body.alertId);
+    expect(broadcastRepository.initialAlerts.size).toBe(1);
+    expect(broadcastRepository.createdInitialAlertCount).toBe(1);
+  });
+
+  it("returns the standard safe error envelope for persistence failures", async () => {
+    const { app, broadcastRepository } = createVerificationApp(
+      new VerificationApiRepository(ReportStatus.VERIFIED),
+    );
+    broadcastRepository.failOnCreate = true;
+    const response = await escalationRequest(app);
+
+    expect(response.status).toBe(500);
+    expect(response.body.error).toMatchObject({
+      code: "INTERNAL_ERROR",
+      message: "An unexpected error occurred.",
+      details: {},
+    });
+    expect(JSON.stringify(response.body)).not.toContain("private persistence details");
   });
 });
