@@ -27,6 +27,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://disaster_ci:ci_only_password@localhost:5432/disaster_management_test?schema=public
       DIRECT_DATABASE_URL: postgresql://disaster_ci:ci_only_password@localhost:5432/disaster_management_test?schema=public
+      RUN_RELIEF_DB_INTEGRATION_TESTS: "true"
       CI: true
 
     steps:
@@ -51,14 +52,14 @@ jobs:
       - name: Type-check
         run: npm run typecheck
 
-      - name: Run tests and enforce coverage
-        run: npm run test:coverage
-
       - name: Validate Prisma schema
         run: npm run db:validate
 
       - name: Apply migration to clean PostgreSQL
         run: npm run db:migrate:deploy
+
+      - name: Run tests and enforce coverage
+        run: npm run test:coverage
 
       - name: Seed deterministic records
         run: npm run db:seed
