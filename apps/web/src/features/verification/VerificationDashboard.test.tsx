@@ -22,6 +22,8 @@ const review = {
     source: "GPS" as const,
   },
 };
+const verifiedReview = { ...review, status: "VERIFIED" as const };
+const rejectedReview = { ...review, status: "REJECTED" as const };
 const secondReport = {
   ...report,
   id: "40000000-0000-4000-8000-000000000002",
@@ -102,6 +104,23 @@ describe("VerificationDashboard", () => {
 
     expect(dashboard.getByRole("button", { name: "Verify" })).toBeEnabled();
     expect(dashboard.getByRole("button", { name: "Reject" })).toBeEnabled();
+  });
+  it.each([
+    { status: "VERIFIED", details: verifiedReview },
+    { status: "REJECTED", details: rejectedReview },
+  ])("shows a read-only final state for a $status review", async ({ status, details }) => {
+    const client = api({ getReportForReview: vi.fn(async () => details) });
+    const view = render(<VerificationDashboard api={client} />);
+    const dashboard = within(view.container);
+    fireEvent.click(await dashboard.findByRole("button", { name: /flood/i }));
+
+    await waitFor(() =>
+      expect(dashboard.getByRole("status")).toHaveTextContent(`Final status: ${status}.`),
+    );
+    expect(dashboard.queryByRole("button", { name: "Verify" })).not.toBeInTheDocument();
+    expect(dashboard.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
+    expect(dashboard.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(client.decideReport).not.toHaveBeenCalled();
   });
   it("shows queue and review errors", async () => {
     render(
@@ -352,31 +371,49 @@ describe("VerificationDashboard", () => {
     expect(dashboard.queryByText(/verified successfully/i)).not.toBeInTheDocument();
   });
 
-  it("handles REPORT_ALREADY_PROCESSED by refreshing without applying a decision", async () => {
-    const listPendingReports = vi.fn().mockResolvedValueOnce([report]).mockResolvedValueOnce([]);
-    const client = api({
-      listPendingReports,
-      decideReport: vi.fn(async () => {
-        throw {
-          status: 409,
-          body: {
-            error: { code: "REPORT_ALREADY_PROCESSED", message: "Already processed" },
-          },
-        };
-      }),
-    });
-    const view = render(<VerificationDashboard api={client} />);
-    const dashboard = await selectReport(view.container, /flood/i);
-    fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
-    confirmDecision(dashboard);
+  it.each([
+    { status: "VERIFIED", details: verifiedReview },
+    { status: "REJECTED", details: rejectedReview },
+  ])(
+    "keeps a clear read-only view after REPORT_ALREADY_PROCESSED ($status)",
+    async ({ status, details }) => {
+      const listPendingReports = vi.fn().mockResolvedValueOnce([report]).mockResolvedValueOnce([]);
+      const getReportForReview = vi
+        .fn()
+        .mockResolvedValueOnce(review)
+        .mockResolvedValueOnce(details);
+      const client = api({
+        listPendingReports,
+        getReportForReview,
+        decideReport: vi.fn(async () => {
+          throw {
+            status: 409,
+            body: {
+              error: { code: "REPORT_ALREADY_PROCESSED", message: "Already processed" },
+            },
+          };
+        }),
+      });
+      const view = render(<VerificationDashboard api={client} />);
+      const dashboard = await selectReport(view.container, /flood/i);
+      fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
+      confirmDecision(dashboard);
 
-    expect(await dashboard.findByRole("alert")).toHaveTextContent(/already been processed/i);
-    expect(await dashboard.findByText(/no reports are awaiting/i)).toBeInTheDocument();
-    expect(dashboard.queryByText(review.description)).not.toBeInTheDocument();
-    expect(dashboard.queryByText(/verified successfully/i)).not.toBeInTheDocument();
-    expect(client.decideReport).toHaveBeenCalledTimes(1);
-    expect(listPendingReports).toHaveBeenCalledTimes(2);
-  });
+      expect(await dashboard.findByRole("alert")).toHaveTextContent(/already been processed/i);
+      await waitFor(() =>
+        expect(dashboard.getByRole("status")).toHaveTextContent(`Final status: ${status}.`),
+      );
+      expect(await dashboard.findByText(/no reports are awaiting/i)).toBeInTheDocument();
+      expect(dashboard.getByText(review.description)).toBeInTheDocument();
+      expect(dashboard.queryByRole("button", { name: "Verify" })).not.toBeInTheDocument();
+      expect(dashboard.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
+      expect(dashboard.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(client.decideReport).toHaveBeenCalledTimes(1);
+      expect(getReportForReview).toHaveBeenCalledTimes(2);
+      expect(getReportForReview).toHaveBeenNthCalledWith(2, report.id);
+      expect(listPendingReports).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it("keeps a network-failed attempt pending and reuses its key on exact retry", async () => {
     const client = api({

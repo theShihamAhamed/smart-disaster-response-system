@@ -22,6 +22,8 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
   const [decisionError, setDecisionError] = useState<string>();
+  const [decisionLocked, setDecisionLocked] = useState(false);
+  const [conflictReviewError, setConflictReviewError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [confirmation, setConfirmation] = useState<{
     reportId: string;
@@ -53,12 +55,20 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
     setEvidenceFailed(false);
     void api
       .getReportForReview(selectedId)
-      .then(setReview)
+      .then((details) => {
+        setReview(details);
+        if (details.status !== "PENDING") {
+          setDecisionLocked(true);
+          setConfirmation(undefined);
+          setDecisionAttempt(undefined);
+        }
+      })
       .catch(() => setReviewError(true));
   }, [api, selectedId, reviewAttempt]);
 
   const requestConfirmation = (result: "VERIFIED" | "REJECTED") => {
-    if (!review || submitting || !evidenceLoaded) return;
+    if (!review || review.status !== "PENDING" || decisionLocked || submitting || !evidenceLoaded)
+      return;
     const trimmed = reason.trim();
     if (result === "REJECTED" && (trimmed.length < 10 || trimmed.length > 500)) {
       setDecisionError("A rejection reason must contain 10 to 500 characters.");
@@ -73,7 +83,15 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
   };
 
   const decide = async () => {
-    if (!review || !confirmation || submitting || !evidenceLoaded) return;
+    if (
+      !review ||
+      review.status !== "PENDING" ||
+      decisionLocked ||
+      !confirmation ||
+      submitting ||
+      !evidenceLoaded
+    )
+      return;
     const { result, reason: trimmed } = confirmation;
     const attemptMatches =
       decisionAttempt?.reportId === review.id &&
@@ -109,11 +127,22 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
           : 0;
       if (status === 409) {
         setDecisionError("This report has already been processed.");
-        setSelectedId(undefined);
+        setDecisionLocked(true);
+        setConflictReviewError(false);
         setReview(null);
         setConfirmation(undefined);
         loadQueue();
         setDecisionAttempt(undefined);
+        void api
+          .getReportForReview(review.id)
+          .then((details) => {
+            setReview(details);
+            if (details.status !== "PENDING") {
+              setDecisionLocked(true);
+              setConfirmation(undefined);
+            }
+          })
+          .catch(() => setConflictReviewError(true));
       } else setDecisionError("Unable to submit the decision. Please retry.");
     } finally {
       setSubmitting(false);
@@ -142,6 +171,8 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
                   if (selectedId !== report.id) {
                     setDecisionAttempt(undefined);
                     setConfirmation(undefined);
+                    setDecisionLocked(false);
+                    setConflictReviewError(false);
                     setRejecting(false);
                     setReason("");
                     setDecisionError(undefined);
@@ -161,11 +192,22 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
       </aside>
       <article className="report-review">
         <div className="section-kicker">Report review</div>
-        <h2>Awaiting officer decision</h2>
+        <h2>
+          {review && review.status !== "PENDING"
+            ? "Report already processed"
+            : "Awaiting officer decision"}
+        </h2>
         {success && <p role="status">{success}</p>}
         {decisionError && <p role="alert">{decisionError}</p>}
+        {conflictReviewError && (
+          <p role="status">
+            The report was already processed, but its current status could not be loaded.
+          </p>
+        )}
         {!selectedId && <p>Select a pending report to review its evidence.</p>}
-        {selectedId && !review && !reviewError && <p role="status">Loading report details…</p>}
+        {selectedId && !review && !reviewError && !conflictReviewError && (
+          <p role="status">Loading report details…</p>
+        )}
         {reviewError && (
           <div role="alert">
             <p>Report details are unavailable.</p>
@@ -176,6 +218,11 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
         {review && (
           <>
             <p className="status">{review.status}</p>
+            {review.status !== "PENDING" && (
+              <p role="status">
+                This report has already been processed. Final status: {review.status}.
+              </p>
+            )}
             <h3>{review.hazardType}</h3>
             {review.requiresExtraReview && (
               <p className="advisory">
@@ -229,32 +276,37 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
                 </button>
               </p>
             )}
-            <section aria-label="Decision actions">
-              <button
-                disabled={submitting || !evidenceLoaded}
-                onClick={() => requestConfirmation("VERIFIED")}
-              >
-                Verify
-              </button>
-              <button disabled={submitting || !evidenceLoaded} onClick={() => setRejecting(true)}>
-                Reject
-              </button>
-              {rejecting && (
-                <>
-                  <label>
-                    Rejection reason
-                    <textarea value={reason} onChange={(event) => setReason(event.target.value)} />
-                  </label>
-                  <button
-                    disabled={submitting || !evidenceLoaded}
-                    onClick={() => requestConfirmation("REJECTED")}
-                  >
-                    Continue to confirmation
-                  </button>
-                </>
-              )}
-              {submitting && <p role="status">Submitting decision…</p>}
-            </section>
+            {review.status === "PENDING" && !decisionLocked && (
+              <section aria-label="Decision actions">
+                <button
+                  disabled={submitting || !evidenceLoaded}
+                  onClick={() => requestConfirmation("VERIFIED")}
+                >
+                  Verify
+                </button>
+                <button disabled={submitting || !evidenceLoaded} onClick={() => setRejecting(true)}>
+                  Reject
+                </button>
+                {rejecting && (
+                  <>
+                    <label>
+                      Rejection reason
+                      <textarea
+                        value={reason}
+                        onChange={(event) => setReason(event.target.value)}
+                      />
+                    </label>
+                    <button
+                      disabled={submitting || !evidenceLoaded}
+                      onClick={() => requestConfirmation("REJECTED")}
+                    >
+                      Continue to confirmation
+                    </button>
+                  </>
+                )}
+                {submitting && <p role="status">Submitting decision…</p>}
+              </section>
+            )}
           </>
         )}
       </article>
