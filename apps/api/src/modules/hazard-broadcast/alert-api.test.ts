@@ -97,10 +97,7 @@ function createBroadcastApp(repository = new FakeBroadcastApiRepository()) {
     repository,
     app: createApp({
       resolveDevelopmentAuthUser,
-      broadcastService: new HazardBroadcastService(
-        repository,
-        () => new Date("2026-10-06T10:00:00.000Z"),
-      ),
+      broadcastService: new HazardBroadcastService(repository),
     }),
   };
 }

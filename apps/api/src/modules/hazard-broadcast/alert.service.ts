@@ -7,10 +7,7 @@ import type {
 import { ReportNotFoundError, ReportNotVerifiedError } from "./types.js";
 
 export class HazardBroadcastService {
-  public constructor(
-    private readonly repository: HazardBroadcastRepository,
-    private readonly now: () => Date = () => new Date(),
-  ) {}
+  public constructor(private readonly repository: HazardBroadcastRepository) {}
 
   public async createAlertFromVerifiedReport(
     input: CreateAlertFromReportInput,
