@@ -17,6 +17,17 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
   const [reviewError, setReviewError] = useState(false);
   const [evidenceFailed, setEvidenceFailed] = useState(false);
   const [evidenceAttempt, setEvidenceAttempt] = useState(0);
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState("");
+  const [decisionError, setDecisionError] = useState<string>();
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState<string>();
+  const [decisionAttempt, setDecisionAttempt] = useState<{
+    reportId: string;
+    result: "VERIFIED" | "REJECTED";
+    reason: string;
+    key: string;
+  }>();
 
   const loadQueue = () => {
     setQueueError(false);
@@ -38,6 +49,56 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
       .catch(() => setReviewError(true));
   }, [api, selectedId]);
 
+  const decide = async (result: "VERIFIED" | "REJECTED") => {
+    if (!review || submitting) return;
+    const trimmed = reason.trim();
+    if (result === "REJECTED" && (trimmed.length < 10 || trimmed.length > 500)) {
+      setDecisionError("A rejection reason must contain 10 to 500 characters.");
+      return;
+    }
+    const attemptMatches =
+      decisionAttempt?.reportId === review.id &&
+      decisionAttempt.result === result &&
+      decisionAttempt.reason === (result === "REJECTED" ? trimmed : "");
+    const idempotencyKey = attemptMatches ? decisionAttempt.key : crypto.randomUUID();
+    setDecisionAttempt({
+      reportId: review.id,
+      result,
+      reason: result === "REJECTED" ? trimmed : "",
+      key: idempotencyKey,
+    });
+    setSubmitting(true);
+    setDecisionError(undefined);
+    try {
+      await api.decideReport(
+        review.id,
+        result === "REJECTED" ? { result, reason: trimmed } : { result },
+        idempotencyKey,
+      );
+      setSuccess(`Report ${result.toLowerCase()} successfully.`);
+      setSelectedId(undefined);
+      setReview(null);
+      setRejecting(false);
+      setReason("");
+      setDecisionAttempt(undefined);
+      loadQueue();
+    } catch (error) {
+      const status =
+        typeof error === "object" && error !== null && "status" in error
+          ? (error as { status: number }).status
+          : 0;
+      if (status === 409) {
+        setDecisionError("This report has already been processed.");
+        setSelectedId(undefined);
+        setReview(null);
+        loadQueue();
+        setDecisionAttempt(undefined);
+      } else setDecisionError("Unable to submit the decision. Please retry.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <section className="verification-dashboard" aria-label="Hazard verification dashboard">
       <aside className="pending-queue">
@@ -56,7 +117,15 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
             <li key={report.id}>
               <button
                 className={selectedId === report.id ? "selected" : ""}
-                onClick={() => setSelectedId(report.id)}
+                onClick={() => {
+                  if (selectedId !== report.id) {
+                    setDecisionAttempt(undefined);
+                    setRejecting(false);
+                    setReason("");
+                    setDecisionError(undefined);
+                  }
+                  setSelectedId(report.id);
+                }}
               >
                 <strong>{report.hazardType}</strong>
                 <span>{displayTime(report.submittedAt)}</span>
@@ -69,6 +138,8 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
       <article className="report-review">
         <div className="section-kicker">Report review</div>
         <h2>Awaiting officer decision</h2>
+        {success && <p role="status">{success}</p>}
+        {decisionError && <p role="alert">{decisionError}</p>}
         {!selectedId && <p>Select a pending report to review its evidence.</p>}
         {selectedId && !review && !reviewError && <p role="status">Loading report details…</p>}
         {reviewError && (
@@ -125,6 +196,26 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
                 </button>
               </p>
             )}
+            <section aria-label="Decision actions">
+              <button disabled={submitting} onClick={() => void decide("VERIFIED")}>
+                Verify
+              </button>
+              <button disabled={submitting} onClick={() => setRejecting(true)}>
+                Reject
+              </button>
+              {rejecting && (
+                <>
+                  <label>
+                    Rejection reason
+                    <textarea value={reason} onChange={(event) => setReason(event.target.value)} />
+                  </label>
+                  <button disabled={submitting} onClick={() => void decide("REJECTED")}>
+                    Confirm rejection
+                  </button>
+                </>
+              )}
+              {submitting && <p role="status">Submitting decision…</p>}
+            </section>
           </>
         )}
       </article>
