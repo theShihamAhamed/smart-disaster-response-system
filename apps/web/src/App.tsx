@@ -34,10 +34,6 @@ export function App({ verificationApi }: { readonly verificationApi?: Verificati
           ))}
         </section>
       )}
-      <p className="boundary">
-        Assessed verification, broadcasting and relief-allocation workflows are intentionally not
-        implemented in this phase.
-      </p>
     </main>
   );
 }
