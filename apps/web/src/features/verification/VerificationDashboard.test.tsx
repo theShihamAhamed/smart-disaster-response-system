@@ -39,6 +39,15 @@ function api(overrides: Partial<VerificationApi> = {}): VerificationApi {
     listPendingReports: vi.fn(async () => [report]),
     getReportForReview: vi.fn(async () => review),
     decideReport: vi.fn(async () => ({})),
+    escalateVerifiedReport: vi.fn(async () => ({
+      httpStatus: 201 as const,
+      draft: {
+        alertId: "70000000-0000-4000-8000-000000000001",
+        sourceReportId: report.id,
+        status: "DRAFT" as const,
+        version: 1,
+      },
+    })),
     ...overrides,
   };
 }
@@ -121,6 +130,179 @@ describe("VerificationDashboard", () => {
     expect(dashboard.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
     expect(dashboard.queryByRole("dialog")).not.toBeInTheDocument();
     expect(client.decideReport).not.toHaveBeenCalled();
+  });
+  it.each([
+    { status: "PENDING", details: review },
+    { status: "REJECTED", details: rejectedReview },
+  ])("does not offer escalation for a $status report", async ({ details }) => {
+    const client = api({ getReportForReview: vi.fn(async () => details) });
+    const view = render(<VerificationDashboard api={client} />);
+    const dashboard = await selectReport(view.container, /flood/i);
+
+    expect(
+      dashboard.queryByRole("button", { name: "Escalate to Warning" }),
+    ).not.toBeInTheDocument();
+    expect(client.escalateVerifiedReport).not.toHaveBeenCalled();
+  });
+  it("prepares and displays a new DRAFT from a VERIFIED report", async () => {
+    const escalateVerifiedReport = vi.fn<VerificationApi["escalateVerifiedReport"]>(async () => ({
+      httpStatus: 201 as const,
+      draft: {
+        alertId: "70000000-0000-4000-8000-000000000001",
+        sourceReportId: report.id,
+        status: "DRAFT" as const,
+        version: 1,
+      },
+    }));
+    const broadcastAlert = vi.fn();
+    const client = {
+      ...api({
+        getReportForReview: vi.fn(async () => verifiedReview),
+        escalateVerifiedReport,
+      }),
+      broadcastAlert,
+    };
+    const view = render(<VerificationDashboard api={client} />);
+    const dashboard = await selectReport(view.container, /flood/i);
+
+    fireEvent.click(dashboard.getByRole("button", { name: "Escalate to Warning" }));
+
+    const escalationStatus = within(
+      dashboard.getByRole("region", { name: "Draft alert escalation" }),
+    );
+    expect(
+      await escalationStatus.findByText(/a new draft alert was prepared/i),
+    ).toBeInTheDocument();
+    expect(escalationStatus.getByText("70000000-0000-4000-8000-000000000001")).toBeInTheDocument();
+    expect(escalationStatus.getByText(report.id)).toBeInTheDocument();
+    expect(escalationStatus.getByText("DRAFT")).toBeInTheDocument();
+    expect(escalationStatus.getByText("1")).toBeInTheDocument();
+    expect(dashboard.getByText("VERIFIED")).toBeInTheDocument();
+    expect(dashboard.queryByRole("button", { name: "Verify" })).not.toBeInTheDocument();
+    expect(dashboard.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
+    expect(escalateVerifiedReport).toHaveBeenCalledWith(report.id, expect.any(String));
+    expect(escalateVerifiedReport.mock.calls[0]?.[1].trim()).not.toBe("");
+    expect(broadcastAlert).not.toHaveBeenCalled();
+  });
+  it("handles an existing DRAFT returned with HTTP 200", async () => {
+    const client = api({
+      getReportForReview: vi.fn(async () => verifiedReview),
+      escalateVerifiedReport: vi.fn(async () => ({
+        httpStatus: 200 as const,
+        draft: {
+          alertId: "70000000-0000-4000-8000-000000000001",
+          sourceReportId: report.id,
+          status: "DRAFT" as const,
+          version: 2,
+        },
+      })),
+    });
+    const view = render(<VerificationDashboard api={client} />);
+    const dashboard = await selectReport(view.container, /flood/i);
+
+    fireEvent.click(dashboard.getByRole("button", { name: "Escalate to Warning" }));
+
+    expect(await dashboard.findByText(/an existing draft alert was returned/i)).toBeInTheDocument();
+    expect(dashboard.getByText("70000000-0000-4000-8000-000000000001")).toBeInTheDocument();
+    expect(dashboard.getByText("DRAFT")).toBeInTheDocument();
+    expect(client.escalateVerifiedReport).toHaveBeenCalledTimes(1);
+    expect(
+      dashboard.queryByRole("button", { name: "Escalate to Warning" }),
+    ).not.toBeInTheDocument();
+  });
+  it("prevents duplicate escalation while a request is pending", async () => {
+    const pendingEscalation =
+      deferred<Awaited<ReturnType<VerificationApi["escalateVerifiedReport"]>>>();
+    const client = api({
+      getReportForReview: vi.fn(async () => verifiedReview),
+      escalateVerifiedReport: vi.fn(() => pendingEscalation.promise),
+    });
+    const view = render(<VerificationDashboard api={client} />);
+    const dashboard = await selectReport(view.container, /flood/i);
+    const escalateButton = dashboard.getByRole("button", { name: "Escalate to Warning" });
+
+    fireEvent.click(escalateButton);
+    fireEvent.click(escalateButton);
+
+    expect(client.escalateVerifiedReport).toHaveBeenCalledTimes(1);
+    expect(escalateButton).toBeDisabled();
+    expect(
+      within(dashboard.getByRole("region", { name: "Draft alert escalation" })).getByRole("status"),
+    ).toHaveTextContent(/preparing draft alert/i);
+    expect(dashboard.getByText("VERIFIED")).toBeInTheDocument();
+    pendingEscalation.resolve({
+      httpStatus: 201,
+      draft: {
+        alertId: "70000000-0000-4000-8000-000000000001",
+        sourceReportId: report.id,
+        status: "DRAFT",
+        version: 1,
+      },
+    });
+    expect(await dashboard.findByText(/a new draft alert was prepared/i)).toBeInTheDocument();
+  });
+  it("shows safe escalation errors and reuses the key on network retry", async () => {
+    const escalateVerifiedReport = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("network unavailable"))
+      .mockResolvedValueOnce({
+        httpStatus: 200 as const,
+        draft: {
+          alertId: "70000000-0000-4000-8000-000000000001",
+          sourceReportId: report.id,
+          status: "DRAFT" as const,
+          version: 1,
+        },
+      });
+    const client = api({
+      getReportForReview: vi.fn(async () => verifiedReview),
+      escalateVerifiedReport,
+    });
+    const view = render(<VerificationDashboard api={client} />);
+    const dashboard = await selectReport(view.container, /flood/i);
+
+    fireEvent.click(dashboard.getByRole("button", { name: "Escalate to Warning" }));
+    expect(await dashboard.findByRole("alert")).toHaveTextContent(
+      /unable to prepare the draft alert/i,
+    );
+    expect(dashboard.getByText("VERIFIED")).toBeInTheDocument();
+    const firstKey = escalateVerifiedReport.mock.calls[0]?.[1];
+
+    fireEvent.click(dashboard.getByRole("button", { name: "Escalate to Warning" }));
+
+    await waitFor(() => expect(escalateVerifiedReport).toHaveBeenCalledTimes(2));
+    expect(escalateVerifiedReport.mock.calls[1]?.[1]).toBe(firstKey);
+  });
+  it("refreshes report state after escalation is rejected as ineligible", async () => {
+    const listPendingReports = vi.fn().mockResolvedValueOnce([report]).mockResolvedValueOnce([]);
+    const getReportForReview = vi
+      .fn()
+      .mockResolvedValueOnce(verifiedReview)
+      .mockResolvedValueOnce(rejectedReview);
+    const client = api({
+      listPendingReports,
+      getReportForReview,
+      escalateVerifiedReport: vi.fn(async () => {
+        throw { status: 409, body: { error: { code: "REPORT_NOT_VERIFIED" } } };
+      }),
+    });
+    const view = render(<VerificationDashboard api={client} />);
+    const dashboard = await selectReport(view.container, /flood/i);
+
+    fireEvent.click(dashboard.getByRole("button", { name: "Escalate to Warning" }));
+
+    expect(await dashboard.findByRole("alert")).toHaveTextContent(
+      /unable to prepare the draft alert/i,
+    );
+    await waitFor(() => expect(dashboard.getByText("REJECTED")).toBeInTheDocument());
+    expect(dashboard.getByText(/final status: rejected/i)).toBeInTheDocument();
+    expect(
+      dashboard.queryByRole("button", { name: "Escalate to Warning" }),
+    ).not.toBeInTheDocument();
+    expect(dashboard.queryByRole("button", { name: "Verify" })).not.toBeInTheDocument();
+    expect(dashboard.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
+    expect(getReportForReview).toHaveBeenCalledTimes(2);
+    expect(listPendingReports).toHaveBeenCalledTimes(2);
   });
   it("shows queue and review errors", async () => {
     render(
@@ -318,7 +500,7 @@ describe("VerificationDashboard", () => {
     await dashboard.findByText(/verified successfully/i);
   });
 
-  it("refreshes the queue and clears active review after successful Verify", async () => {
+  it("refreshes the queue and retains a read-only VERIFIED review after successful Verify", async () => {
     const listPendingReports = vi.fn().mockResolvedValueOnce([report]).mockResolvedValueOnce([]);
     const client = api({ listPendingReports });
     const view = render(<VerificationDashboard api={client} />);
@@ -328,8 +510,11 @@ describe("VerificationDashboard", () => {
 
     expect(await dashboard.findByText(/verified successfully/i)).toBeInTheDocument();
     expect(await dashboard.findByText(/no reports are awaiting/i)).toBeInTheDocument();
-    expect(dashboard.queryByText(review.description)).not.toBeInTheDocument();
-    expect(dashboard.getByText(/select a pending report/i)).toBeInTheDocument();
+    expect(dashboard.getByText(review.description)).toBeInTheDocument();
+    expect(dashboard.getByText("VERIFIED")).toBeInTheDocument();
+    expect(dashboard.getByRole("button", { name: "Escalate to Warning" })).toBeInTheDocument();
+    expect(dashboard.queryByRole("button", { name: "Verify" })).not.toBeInTheDocument();
+    expect(dashboard.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
     expect(listPendingReports).toHaveBeenCalledTimes(2);
   });
 

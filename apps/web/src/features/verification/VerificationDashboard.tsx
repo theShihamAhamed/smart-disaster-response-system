@@ -113,8 +113,8 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
         idempotencyKey,
       );
       setSuccess(`Report ${result.toLowerCase()} successfully.`);
-      setSelectedId(undefined);
-      setReview(null);
+      setReview({ ...review, status: result });
+      setDecisionLocked(true);
       setConfirmation(undefined);
       setRejecting(false);
       setReason("");
@@ -149,6 +149,58 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
     }
   };
 
+  const [escalationAttempt, setEscalationAttempt] = useState<{
+    reportId: string;
+    key: string;
+  }>();
+  const [escalationSubmitting, setEscalationSubmitting] = useState(false);
+  const [escalationError, setEscalationError] = useState<string>();
+  const [escalationResult, setEscalationResult] = useState<{
+    reportId: string;
+    httpStatus: 200 | 201;
+    draft: {
+      alertId: string;
+      sourceReportId: string;
+      status: "DRAFT";
+      version: number;
+    };
+  }>();
+
+  const escalate = async () => {
+    if (review?.status !== "VERIFIED" || escalationSubmitting || escalationResult) return;
+    const key =
+      escalationAttempt?.reportId === review.id ? escalationAttempt.key : crypto.randomUUID();
+    setEscalationAttempt({ reportId: review.id, key });
+    setEscalationSubmitting(true);
+    setEscalationError(undefined);
+    try {
+      const result = await api.escalateVerifiedReport(review.id, key);
+      setEscalationResult({ reportId: review.id, ...result });
+      setEscalationAttempt(undefined);
+    } catch (error) {
+      setEscalationError("Unable to prepare the DRAFT alert. Please retry safely.");
+      const status =
+        typeof error === "object" && error !== null && "status" in error
+          ? (error as { status: number }).status
+          : 0;
+      if (status === 409) {
+        setReview(null);
+        setConflictReviewError(false);
+        setDecisionLocked(true);
+        loadQueue();
+        void api
+          .getReportForReview(review.id)
+          .then((details) => {
+            setReview(details);
+            setDecisionLocked(details.status !== "PENDING");
+          })
+          .catch(() => setConflictReviewError(true));
+      }
+    } finally {
+      setEscalationSubmitting(false);
+    }
+  };
+
   return (
     <section className="verification-dashboard" aria-label="Hazard verification dashboard">
       <aside className="pending-queue">
@@ -167,12 +219,16 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
             <li key={report.id}>
               <button
                 className={selectedId === report.id ? "selected" : ""}
+                disabled={escalationSubmitting}
                 onClick={() => {
                   if (selectedId !== report.id) {
                     setDecisionAttempt(undefined);
                     setConfirmation(undefined);
                     setDecisionLocked(false);
                     setConflictReviewError(false);
+                    setEscalationAttempt(undefined);
+                    setEscalationResult(undefined);
+                    setEscalationError(undefined);
                     setRejecting(false);
                     setReason("");
                     setDecisionError(undefined);
@@ -199,11 +255,8 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
         </h2>
         {success && <p role="status">{success}</p>}
         {decisionError && <p role="alert">{decisionError}</p>}
-        {conflictReviewError && (
-          <p role="status">
-            The report was already processed, but its current status could not be loaded.
-          </p>
-        )}
+        {escalationError && <p role="alert">{escalationError}</p>}
+        {conflictReviewError && <p role="status">The current report status could not be loaded.</p>}
         {!selectedId && <p>Select a pending report to review its evidence.</p>}
         {selectedId && !review && !reviewError && !conflictReviewError && (
           <p role="status">Loading report details…</p>
@@ -222,6 +275,39 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
               <p role="status">
                 This report has already been processed. Final status: {review.status}.
               </p>
+            )}
+            {review.status === "VERIFIED" && (
+              <section aria-label="Draft alert escalation">
+                <p>
+                  Prepare a DRAFT alert for the broadcast workflow. This will not activate or
+                  broadcast the alert.
+                </p>
+                {escalationSubmitting && <p role="status">Preparing DRAFT alert…</p>}
+                {!escalationResult && (
+                  <button disabled={escalationSubmitting} onClick={() => void escalate()}>
+                    Escalate to Warning
+                  </button>
+                )}
+                {escalationResult?.reportId === review.id && (
+                  <div role="status">
+                    <p>
+                      {escalationResult.httpStatus === 201
+                        ? "A new DRAFT alert was prepared."
+                        : "An existing DRAFT alert was returned."}
+                    </p>
+                    <dl>
+                      <dt>Alert ID</dt>
+                      <dd>{escalationResult.draft.alertId}</dd>
+                      <dt>Source report ID</dt>
+                      <dd>{escalationResult.draft.sourceReportId}</dd>
+                      <dt>Status</dt>
+                      <dd>{escalationResult.draft.status}</dd>
+                      <dt>Version</dt>
+                      <dd>{escalationResult.draft.version}</dd>
+                    </dl>
+                  </div>
+                )}
+              </section>
             )}
             <h3>{review.hazardType}</h3>
             {review.requiresExtraReview && (

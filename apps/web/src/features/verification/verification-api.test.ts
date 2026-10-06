@@ -1,24 +1,45 @@
 import { describe, expect, it, vi } from "vitest";
 import { createVerificationApi } from "./verification-api";
 
-function createClient() {
+function createClient(escalationHttpStatus: 200 | 201 = 201) {
   const get = vi.fn(<T>(path: string): Promise<T> => Promise.resolve({ path } as unknown as T));
   const post = vi.fn(
     <TResponse, TBody>(
       path: string,
-      options: { body: TBody; headers: HeadersInit },
+      options: { body?: TBody; headers: HeadersInit },
     ): Promise<TResponse> => Promise.resolve({ path, ...options } as unknown as TResponse),
+  );
+  const postWithResponse = vi.fn(
+    <TResponse, TBody>(
+      path: string,
+      options: { body?: TBody; headers: HeadersInit },
+    ): Promise<{ readonly status: number; readonly body: TResponse }> => {
+      void path;
+      void options;
+      return Promise.resolve({
+        status: escalationHttpStatus,
+        body: { alertId: "alert-1", sourceReportId: "report-1", status: "DRAFT", version: 1 },
+      } as unknown as { readonly status: number; readonly body: TResponse });
+    },
   );
 
   const client = {
     get: <T>(path: string): Promise<T> => get(path) as unknown as Promise<T>,
     post: <TResponse, TBody>(
       path: string,
-      options: { body: TBody; headers: HeadersInit },
+      options: { body?: TBody; headers: HeadersInit },
     ): Promise<TResponse> => post(path, options) as unknown as Promise<TResponse>,
+    postWithResponse: <TResponse, TBody>(
+      path: string,
+      options: { body?: TBody; headers: HeadersInit },
+    ): Promise<{ readonly status: number; readonly body: TResponse }> =>
+      postWithResponse(path, options) as unknown as Promise<{
+        readonly status: number;
+        readonly body: TResponse;
+      }>,
   };
 
-  return { api: createVerificationApi(client), get, post };
+  return { api: createVerificationApi(client), get, post, postWithResponse };
 }
 
 describe("verification API adapter", () => {
@@ -66,6 +87,45 @@ describe("verification API adapter", () => {
     });
   });
 
+  it("prepares a DRAFT through the escalation route without a request body", async () => {
+    const { api, postWithResponse } = createClient();
+    const reportId = "40000000-0000-4000-8000-000000000001";
+    const idempotencyKey = "60000000-0000-4000-8000-000000000001";
+
+    await expect(api.escalateVerifiedReport(reportId, idempotencyKey)).resolves.toEqual({
+      httpStatus: 201,
+      draft: {
+        alertId: "alert-1",
+        sourceReportId: "report-1",
+        status: "DRAFT",
+        version: 1,
+      },
+    });
+    expect(postWithResponse).toHaveBeenCalledWith(`/verification/reports/${reportId}/escalations`, {
+      headers: { "Idempotency-Key": idempotencyKey },
+    });
+  });
+
+  it("rejects a blank escalation key before making the request", async () => {
+    const { api, postWithResponse } = createClient();
+
+    await expect(
+      api.escalateVerifiedReport("40000000-0000-4000-8000-000000000001", "  "),
+    ).rejects.toThrow(/idempotency key is required/i);
+    expect(postWithResponse).not.toHaveBeenCalled();
+  });
+
+  it("preserves HTTP 200 when an existing draft is returned", async () => {
+    const { api } = createClient(200);
+
+    await expect(
+      api.escalateVerifiedReport(
+        "40000000-0000-4000-8000-000000000001",
+        "60000000-0000-4000-8000-000000000001",
+      ),
+    ).resolves.toMatchObject({ httpStatus: 200, draft: { status: "DRAFT" } });
+  });
+
   it("propagates shared API client errors without replacing them", async () => {
     const failure = new Error("API unavailable");
     const api = createVerificationApi({
@@ -75,8 +135,16 @@ describe("verification API adapter", () => {
       },
       post: async <TResponse, TBody>(
         _path: string,
-        _options: { body: TBody; headers: HeadersInit },
+        _options: { body?: TBody; headers: HeadersInit },
       ): Promise<TResponse> => {
+        void _path;
+        void _options;
+        throw failure;
+      },
+      postWithResponse: async <TResponse, TBody>(
+        _path: string,
+        _options: { body?: TBody; headers: HeadersInit },
+      ): Promise<{ readonly status: number; readonly body: TResponse }> => {
         void _path;
         void _options;
         throw failure;
@@ -88,6 +156,12 @@ describe("verification API adapter", () => {
       api.decideReport(
         "40000000-0000-4000-8000-000000000001",
         { result: "VERIFIED" },
+        "60000000-0000-4000-8000-000000000001",
+      ),
+    ).rejects.toBe(failure);
+    await expect(
+      api.escalateVerifiedReport(
+        "40000000-0000-4000-8000-000000000001",
         "60000000-0000-4000-8000-000000000001",
       ),
     ).rejects.toBe(failure);
