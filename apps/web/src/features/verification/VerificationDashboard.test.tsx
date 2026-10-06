@@ -95,6 +95,33 @@ describe("VerificationDashboard", () => {
     );
     expect(await screen.findByText(/unable to load pending/i)).toBeInTheDocument();
   });
+  it("retries a failed review request for the same pending report", async () => {
+    let reviewRequest = 0;
+    const getReportForReview = vi.fn(async () => {
+      reviewRequest += 1;
+      if (reviewRequest === 1) throw new Error("review unavailable");
+      return review;
+    });
+    const escalateReport = vi.fn();
+    const client = { ...api({ getReportForReview }), escalateReport };
+    const view = render(<VerificationDashboard api={client} />);
+    const dashboard = within(view.container);
+
+    fireEvent.click(await dashboard.findByRole("button", { name: /flood/i }));
+    expect(await dashboard.findByText(/report details are unavailable/i)).toBeInTheDocument();
+    expect(getReportForReview).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(dashboard.getByRole("button", { name: "Retry review" }));
+
+    expect(await dashboard.findByText(review.description)).toBeInTheDocument();
+    expect(getReportForReview).toHaveBeenCalledTimes(2);
+    expect(getReportForReview).toHaveBeenNthCalledWith(1, report.id);
+    expect(getReportForReview).toHaveBeenNthCalledWith(2, report.id);
+    expect(dashboard.getByText("PENDING")).toBeInTheDocument();
+    expect(dashboard.getByText("Awaiting officer decision")).toBeInTheDocument();
+    expect(client.decideReport).not.toHaveBeenCalled();
+    expect(escalateReport).not.toHaveBeenCalled();
+  });
   it("retries the same evidence without changing the pending review state", async () => {
     const view = render(<VerificationDashboard api={api()} />);
     const dashboard = within(view.container);

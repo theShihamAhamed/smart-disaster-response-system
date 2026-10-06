@@ -15,6 +15,7 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
   const [selectedId, setSelectedId] = useState<string>();
   const [review, setReview] = useState<ReportReview | null>(null);
   const [reviewError, setReviewError] = useState(false);
+  const [reviewAttempt, setReviewAttempt] = useState(0);
   const [evidenceFailed, setEvidenceFailed] = useState(false);
   const [evidenceAttempt, setEvidenceAttempt] = useState(0);
   const [rejecting, setRejecting] = useState(false);
@@ -47,7 +48,7 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
       .getReportForReview(selectedId)
       .then(setReview)
       .catch(() => setReviewError(true));
-  }, [api, selectedId]);
+  }, [api, selectedId, reviewAttempt]);
 
   const decide = async (result: "VERIFIED" | "REJECTED") => {
     if (!review || submitting) return;
@@ -146,7 +147,7 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
           <div role="alert">
             <p>Report details are unavailable.</p>
             <button onClick={() => setSelectedId(undefined)}>Choose another report</button>
-            <button onClick={() => setSelectedId(selectedId)}>Retry review</button>
+            <button onClick={() => setReviewAttempt((attempt) => attempt + 1)}>Retry review</button>
           </div>
         )}
         {review && (
