@@ -22,6 +22,7 @@ const review = {
     source: "GPS" as const,
   },
 };
+const demoEvidenceReview = { ...review, photoRef: "/evidence/demo-flood.svg" };
 const verifiedReview = { ...review, status: "VERIFIED" as const };
 const rejectedReview = { ...review, status: "REJECTED" as const };
 const secondReport = {
@@ -116,7 +117,8 @@ describe("VerificationDashboard", () => {
     expect(screen.getByAltText(/submitted evidence/i)).toBeInTheDocument();
   });
   it("enables Verify and Reject only after evidence loads successfully", async () => {
-    const view = render(<VerificationDashboard api={api()} />);
+    const client = api({ getReportForReview: vi.fn(async () => demoEvidenceReview) });
+    const view = render(<VerificationDashboard api={client} />);
     const dashboard = within(view.container);
     const queueItem = await dashboard.findByRole("button", { name: /flood/i });
     expect(queueItem).toHaveAttribute("aria-pressed", "false");
@@ -127,7 +129,9 @@ describe("VerificationDashboard", () => {
     expect(dashboard.getByRole("button", { name: "Reject" })).toBeDisabled();
     expect(dashboard.queryByRole("dialog")).not.toBeInTheDocument();
 
-    fireEvent.load(dashboard.getByAltText(/submitted evidence/i));
+    const evidence = dashboard.getByAltText(/submitted evidence/i);
+    expect(evidence).toHaveAttribute("src", "/evidence/demo-flood.svg");
+    fireEvent.load(evidence);
 
     expect(dashboard.getByRole("button", { name: "Verify" })).toBeEnabled();
     expect(dashboard.getByRole("button", { name: "Reject" })).toBeEnabled();
