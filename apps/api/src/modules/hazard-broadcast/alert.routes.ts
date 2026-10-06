@@ -9,5 +9,10 @@ export function createAlertRouter(service: HazardBroadcastService): Router {
   const controller = new AlertController(service);
   router.use(requireRoles(UserRole.DMC_DUTY_OFFICER));
   router.post("/from-report/:reportId", controller.createFromReport);
+  router.patch("/:alertId", controller.updateDraft);
+  router.get("/:alertId/preview", controller.getPreview);
+  router.get("/:alertId/similar-active", controller.getSimilarActive);
+  router.post("/:alertId/broadcast", controller.broadcastAlert);
+  router.post("/:alertId/replacement-drafts", controller.createReplacementDraft);
   return router;
 }
