@@ -52,3 +52,28 @@ export const errorEnvelopeSchema = z.object({
     details: z.record(z.unknown()),
   }),
 });
+// ---------------------------------------------------------------------------
+// Submit Citizen Hazard Report (Eshan's component)
+// One schema shared by the mobile form and the API, so the rules cannot drift.
+// ---------------------------------------------------------------------------
+export const HAZARD_DESCRIPTION_MIN_LENGTH = 10;
+export const HAZARD_DESCRIPTION_MAX_LENGTH = 500;
+export const PHOTO_REF_MAX_LENGTH = 500;
+
+export const hazardDescriptionSchema = z
+  .string()
+  .trim()
+  .min(HAZARD_DESCRIPTION_MIN_LENGTH)
+  .max(HAZARD_DESCRIPTION_MAX_LENGTH);
+
+export const photoRefSchema = z.string().trim().min(1).max(PHOTO_REF_MAX_LENGTH);
+
+export const submitHazardReportSchema = z.object({
+  clientReportId: uuidSchema,
+  hazardType: hazardTypeSchema,
+  description: hazardDescriptionSchema,
+  photoRef: photoRefSchema,
+  location: locationSchema,
+});
+
+export type SubmitHazardReportInput = z.infer<typeof submitHazardReportSchema>;
