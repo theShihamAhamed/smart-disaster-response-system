@@ -23,7 +23,9 @@ import {
 } from "./types.js";
 
 export type RecipientEstimator = (targetZones: readonly TargetZoneSummary[]) => number;
-export type RecipientResolver = (targetZoneIds: readonly string[]) => Promise<readonly string[]> | readonly string[];
+export type RecipientResolver = (
+  targetZoneIds: readonly string[],
+) => Promise<readonly string[]> | readonly string[];
 
 export const defaultRecipientEstimator: RecipientEstimator = () => 0;
 
@@ -193,9 +195,7 @@ export class HazardBroadcastService {
     });
   }
 
-  public async createReplacementDraft(
-    input: CreateReplacementDraftInput,
-  ): Promise<AlertRecord> {
+  public async createReplacementDraft(input: CreateReplacementDraftInput): Promise<AlertRecord> {
     const parent = await this.repository.findAlertById(input.parentAlertId);
     if (!parent) {
       throw new AlertNotFoundError(input.parentAlertId);

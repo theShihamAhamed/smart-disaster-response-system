@@ -31,9 +31,7 @@ const updateDraftBodySchema = z
       .trim()
       .min(1, "Safety instructions cannot be blank.")
       .max(1000, "Safety instructions cannot exceed 1000 characters."),
-    targetZoneIds: z
-      .array(uuidSchema)
-      .min(1, "At least one target zone must be selected."),
+    targetZoneIds: z.array(uuidSchema).min(1, "At least one target zone must be selected."),
   })
   .strict();
 

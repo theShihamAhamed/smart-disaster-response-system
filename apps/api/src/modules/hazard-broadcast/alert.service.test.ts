@@ -1,4 +1,11 @@
-import { AlertSeverity, AlertStatus, DeliveryStatus, HazardType, ReportStatus, ZoneSeverity } from "@disaster/domain";
+import {
+  AlertSeverity,
+  AlertStatus,
+  DeliveryStatus,
+  HazardType,
+  ReportStatus,
+  ZoneSeverity,
+} from "@disaster/domain";
 import { describe, expect, it } from "vitest";
 import { HazardBroadcastService } from "./alert.service.js";
 import type {
@@ -71,7 +78,10 @@ class FakeHazardBroadcastRepository implements HazardBroadcastRepository {
   }
 
   public async findAlertById(id: string): Promise<AlertRecord | null> {
-    return this.alerts.get(id) ?? (this.initialAlert && this.initialAlert.id === id ? this.initialAlert : null);
+    return (
+      this.alerts.get(id) ??
+      (this.initialAlert && this.initialAlert.id === id ? this.initialAlert : null)
+    );
   }
 
   public async findInitialAlertForReport(id: string): Promise<AlertRecord | null> {
@@ -228,7 +238,9 @@ class FakeHazardBroadcastRepository implements HazardBroadcastRepository {
     };
   }
 
-  public async createReplacementDraft(command: CreateReplacementDraftCommand): Promise<AlertRecord> {
+  public async createReplacementDraft(
+    command: CreateReplacementDraftCommand,
+  ): Promise<AlertRecord> {
     const newAlertId = `50000000-0000-4000-8000-${String(this.alerts.size + 1).padStart(12, "0")}`;
     const replacement: AlertRecord = {
       id: newAlertId,
@@ -1135,12 +1147,7 @@ describe("HazardBroadcastService - broadcastAlert", () => {
   it("queues PENDING deliveries if a recipient resolver is provided", async () => {
     const repository = new FakeHazardBroadcastRepository();
     const resolver = async (zones: readonly string[]) => zones.map((z) => `recipient-for-${z}`);
-    const service = new HazardBroadcastService(
-      repository,
-      undefined,
-      () => fixedNow,
-      resolver,
-    );
+    const service = new HazardBroadcastService(repository, undefined, () => fixedNow, resolver);
     await service.createAlertFromVerifiedReport({ reportId, officerId });
     await service.updateDraftAlert({
       alertId,

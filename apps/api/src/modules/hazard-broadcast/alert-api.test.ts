@@ -27,11 +27,7 @@ import type {
   TargetZoneSummary,
   UpdateDraftAlertCommand,
 } from "./types.js";
-import {
-  AlertAlreadyActiveError,
-  AlertNotFoundError,
-  AlertNotInDraftError,
-} from "./types.js";
+import { AlertAlreadyActiveError, AlertNotFoundError, AlertNotInDraftError } from "./types.js";
 
 const officerId = "10000000-0000-4000-8000-000000000004";
 const dutyOfficerWithoutBroadcast = "10000000-0000-4000-8000-000000000003";
@@ -101,7 +97,10 @@ class FakeBroadcastApiRepository implements HazardBroadcastRepository {
   }
 
   public async findAlertById(id: string): Promise<AlertRecord | null> {
-    return this.alerts.get(id) ?? (this.initialAlert && this.initialAlert.id === id ? this.initialAlert : null);
+    return (
+      this.alerts.get(id) ??
+      (this.initialAlert && this.initialAlert.id === id ? this.initialAlert : null)
+    );
   }
 
   public async findInitialAlertForReport(id: string): Promise<AlertRecord | null> {
@@ -256,7 +255,9 @@ class FakeBroadcastApiRepository implements HazardBroadcastRepository {
     };
   }
 
-  public async createReplacementDraft(command: CreateReplacementDraftCommand): Promise<AlertRecord> {
+  public async createReplacementDraft(
+    command: CreateReplacementDraftCommand,
+  ): Promise<AlertRecord> {
     const newAlertId = `50000000-0000-4000-8000-${String(this.alerts.size + 1).padStart(12, "0")}`;
     const replacement: AlertRecord = {
       id: newAlertId,

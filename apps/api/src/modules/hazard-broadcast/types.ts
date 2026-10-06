@@ -205,7 +205,9 @@ export class AlertNotActiveError extends Error {
   public readonly code = "ALERT_NOT_ACTIVE";
 
   public constructor(public readonly status: AlertStatus) {
-    super(`Cannot create replacement draft from alert with status ${status}. Parent alert must be ACTIVE.`);
+    super(
+      `Cannot create replacement draft from alert with status ${status}. Parent alert must be ACTIVE.`,
+    );
     this.name = "AlertNotActiveError";
   }
 }
