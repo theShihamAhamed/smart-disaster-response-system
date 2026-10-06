@@ -60,9 +60,7 @@ function mapAlertRecord(alert: PrismaAlertWithZones): AlertRecord {
 }
 
 export class PrismaHazardBroadcastRepository implements HazardBroadcastRepository {
-  public constructor(
-    private readonly prisma: Pick<PrismaClient, "hazardReport" | "alert">,
-  ) {}
+  public constructor(private readonly prisma: Pick<PrismaClient, "hazardReport" | "alert">) {}
 
   public async findSourceReport(reportId: string): Promise<SourceReport | null> {
     return this.prisma.hazardReport.findUnique({
@@ -110,10 +108,7 @@ export class PrismaHazardBroadcastRepository implements HazardBroadcastRepositor
 
       return { kind: "CREATED", alert: mapAlertRecord(created) };
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
-      ) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
         const concurrentAlert = await this.findInitialAlertForReport(command.sourceReportId);
         if (concurrentAlert) {
           return { kind: "EXISTING", alert: concurrentAlert };

@@ -1,10 +1,4 @@
-import {
-  AlertSeverity,
-  AlertStatus,
-  HazardType,
-  ReportStatus,
-  UserRole,
-} from "@disaster/domain";
+import { AlertSeverity, AlertStatus, HazardType, ReportStatus, UserRole } from "@disaster/domain";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../app.js";
