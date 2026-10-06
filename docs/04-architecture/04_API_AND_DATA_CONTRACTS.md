@@ -39,6 +39,15 @@ The officer web app reads `VITE_API_BASE_URL` and the optional development/demo 
 
 The API permits browser access only from the exact origin configured by `WEB_ORIGIN`. Its central CORS policy allows `GET`, `POST`, `PATCH` and `OPTIONS` requests with JSON, `Idempotency-Key` and `X-Dev-User-Id` headers. A missing `WEB_ORIGIN` grants no browser origin, and deployed environments configure their frontend origin without source-code changes.
 
+Officer feature modules use the shared API client for `GET`, `POST` and `PATCH` calls rather than ad hoc `fetch` configuration. Mutation calls provide typed JSON through `body` and retry-sensitive operations add an `Idempotency-Key` per request; the shared web client retains its configured `X-Dev-User-Id` automatically.
+
+```ts
+await sharedApiClient.post<ResponsePayload, RequestPayload>("/resources", {
+  body: requestPayload,
+  headers: { "Idempotency-Key": idempotencyKey },
+});
+```
+
 ## Submit Citizen Hazard Report
 
 ### `POST /hazard-reports`

@@ -18,6 +18,12 @@ export interface HttpClientOptions {
 
 export type GetRequestOptions = Omit<RequestInit, "body" | "method">;
 
+export interface JsonRequestOptions<TBody> extends Omit<RequestInit, "body" | "method"> {
+  readonly body?: TBody;
+}
+
+type SupportedMethod = "GET" | "PATCH" | "POST";
+
 export function createHttpClient({
   baseUrl,
   fetchImpl = fetch,
@@ -39,23 +45,71 @@ export function createHttpClient({
     return headers;
   }
 
-  async function get<T>(path: string, requestOptions: GetRequestOptions = {}): Promise<T> {
-    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-    const response = await fetchImpl(`${normalizedBaseUrl}${normalizedPath}`, {
-      ...requestOptions,
-      method: "GET",
-      headers: buildHeaders(requestOptions.headers),
-    });
-    const body = (await response.json()) as T | ApiErrorEnvelope;
-    if (!response.ok) {
-      throw new ApiClientError(response.status, body as ApiErrorEnvelope);
+  async function parseResponseBody(response: Response): Promise<unknown> {
+    const text = await response.text();
+
+    if (!text.trim() && response.ok) {
+      return undefined;
     }
-    return body as T;
+
+    return JSON.parse(text) as unknown;
+  }
+
+  async function request<TResponse, TBody>(
+    method: SupportedMethod,
+    path: string,
+    requestOptions: JsonRequestOptions<TBody>,
+  ): Promise<TResponse> {
+    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+    const { body, headers: requestHeaders, ...fetchOptions } = requestOptions;
+    const headers = buildHeaders(requestHeaders);
+    let serializedBody: string | undefined;
+
+    if (body !== undefined) {
+      serializedBody = JSON.stringify(body);
+      if (serializedBody === undefined) {
+        throw new TypeError("Request body must be JSON-serializable.");
+      }
+      headers.set("Content-Type", "application/json");
+    }
+
+    const response = await fetchImpl(`${normalizedBaseUrl}${normalizedPath}`, {
+      ...fetchOptions,
+      method,
+      headers,
+      ...(serializedBody === undefined ? {} : { body: serializedBody }),
+    });
+    const responseBody = await parseResponseBody(response);
+    if (!response.ok) {
+      throw new ApiClientError(response.status, responseBody as ApiErrorEnvelope);
+    }
+    return responseBody as TResponse;
+  }
+
+  async function get<TResponse>(
+    path: string,
+    requestOptions: GetRequestOptions = {},
+  ): Promise<TResponse> {
+    return request<TResponse, never>("GET", path, requestOptions);
+  }
+
+  async function post<TResponse, TBody = unknown>(
+    path: string,
+    requestOptions: JsonRequestOptions<TBody> = {},
+  ): Promise<TResponse> {
+    return request<TResponse, TBody>("POST", path, requestOptions);
+  }
+
+  async function patch<TResponse, TBody = unknown>(
+    path: string,
+    requestOptions: JsonRequestOptions<TBody> = {},
+  ): Promise<TResponse> {
+    return request<TResponse, TBody>("PATCH", path, requestOptions);
   }
 
   async function getHealth(): Promise<HealthResponse> {
     return get<HealthResponse>("/health");
   }
 
-  return { get, getHealth } as const;
+  return { get, getHealth, patch, post } as const;
 }
