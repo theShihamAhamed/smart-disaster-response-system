@@ -97,6 +97,7 @@ class VerificationApiRepository implements HazardVerificationRepository {
   }
 
   public async decidePendingReport(command: DecisionCommand): Promise<DecisionPersistenceResult> {
+    if (command.reportId !== reportId) return { kind: "REPORT_NOT_FOUND" };
     if (!this.status) return { kind: "REPORT_NOT_FOUND" };
     if (this.status !== ReportStatus.PENDING) {
       return { kind: "REPORT_ALREADY_PROCESSED", status: this.status };
@@ -289,6 +290,44 @@ describe("verification API", () => {
 
     expect(response.status).toBe(404);
     expect(response.body.error).toMatchObject({ code: "NOT_FOUND", fieldErrors: {}, details: {} });
+  });
+
+  it("validates malformed UUIDs before report review lookup", async () => {
+    const { app } = createVerificationApp();
+    const response = await officerRequest(app).get("/api/v1/verification/reports/not-a-uuid");
+
+    expect(response.status).toBe(422);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("validates malformed UUIDs before decision submission", async () => {
+    const { app } = createVerificationApp();
+    const response = await officerRequest(app)
+      .post("/api/v1/verification/reports/not-a-uuid/decision")
+      .set("Idempotency-Key", commandKey)
+      .send({ result: VerificationResult.VERIFIED });
+
+    expect(response.status).toBe(422);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("keeps a valid but unknown review UUID as not found", async () => {
+    const { app } = createVerificationApp();
+    const response = await officerRequest(app).get(`/api/v1/verification/reports/${unknownId}`);
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
+  });
+
+  it("keeps a valid but unknown decision UUID as not found", async () => {
+    const { app } = createVerificationApp();
+    const response = await officerRequest(app)
+      .post(`/api/v1/verification/reports/${unknownId}/decision`)
+      .set("Idempotency-Key", commandKey)
+      .send({ result: VerificationResult.VERIFIED });
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
   });
 
   it("uses the trusted officer identity when verifying a pending report", async () => {

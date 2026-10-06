@@ -24,7 +24,7 @@ const decisionBodySchema = z
 function parseReportIdParam(params: Record<string, unknown>): string {
   const parsed = reportIdParamsSchema.safeParse(params);
   if (!parsed.success) {
-    throw new ReportNotFoundError(String(params.reportId ?? "unknown"));
+    throw new ValidationError("reportId must be a valid UUID.");
   }
   return parsed.data.reportId;
 }
