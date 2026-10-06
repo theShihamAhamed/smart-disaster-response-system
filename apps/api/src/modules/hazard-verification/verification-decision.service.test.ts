@@ -90,6 +90,37 @@ describe("HazardVerificationService decision workflow", () => {
     expect(repository.decisions).toHaveLength(1);
   });
 
+  it("persists trimmed optional notes for a VERIFIED decision", async () => {
+    const { repository, service } = serviceFor();
+
+    const decision = await service.decideReport({
+      reportId,
+      officerId: officerOne,
+      result: VerificationResult.VERIFIED,
+      reason: "  Evidence reviewed against the reported location.  ",
+    });
+
+    expect(decision.reason).toBe("Evidence reviewed against the reported location.");
+    expect(repository.decisions[0]?.reason).toBe(
+      "Evidence reviewed against the reported location.",
+    );
+    expect(repository.currentStatus()).toBe(ReportStatus.VERIFIED);
+  });
+
+  it("stores whitespace-only VERIFIED notes as absent", async () => {
+    const { repository, service } = serviceFor();
+
+    const decision = await service.decideReport({
+      reportId,
+      officerId: officerOne,
+      result: VerificationResult.VERIFIED,
+      reason: "  \t  ",
+    });
+
+    expect(decision.reason).toBeNull();
+    expect(repository.decisions[0]?.reason).toBeNull();
+  });
+
   it("records a trimmed rejection reason with officer and timestamp", async () => {
     const { repository, service } = serviceFor();
 

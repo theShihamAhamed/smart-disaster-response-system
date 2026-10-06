@@ -111,4 +111,30 @@ describe("PrismaHazardVerificationRepository", () => {
     );
     expect(prisma.verificationDecision.create).toHaveBeenCalledOnce();
   });
+
+  it("persists VERIFIED notes in the existing nullable reason field", async () => {
+    const prisma = prismaStub();
+    prisma.hazardReport.updateMany.mockResolvedValue({ count: 1 });
+    prisma.verificationDecision.create.mockResolvedValue({
+      id: "42000000-0000-4000-8000-000000000002",
+      reportId: "40000000-0000-4000-8000-000000000001",
+      officerId: "10000000-0000-4000-8000-000000000003",
+      result: ReportStatus.VERIFIED,
+      reason: "Evidence reviewed.",
+      decidedAt: new Date("2026-10-05T10:00:00.000Z"),
+    });
+    const repository = new PrismaHazardVerificationRepository(prisma as never);
+
+    await repository.decidePendingReport({
+      reportId: "40000000-0000-4000-8000-000000000001",
+      officerId: "10000000-0000-4000-8000-000000000003",
+      result: ReportStatus.VERIFIED,
+      reason: "Evidence reviewed.",
+      decidedAt: new Date("2026-10-05T10:00:00.000Z"),
+    });
+
+    expect(prisma.verificationDecision.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ reason: "Evidence reviewed." }) }),
+    );
+  });
 });

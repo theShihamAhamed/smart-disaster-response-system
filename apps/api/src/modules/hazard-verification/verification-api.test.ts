@@ -375,6 +375,21 @@ describe("verification API", () => {
     expect(repository.commands[0]?.officerId).toBe(officerId);
   });
 
+  it("accepts optional VERIFIED notes and returns the persisted trimmed value", async () => {
+    const { app, repository } = createVerificationApp();
+    const response = await officerRequest(app)
+      .post(`/api/v1/verification/reports/${reportId}/decision`)
+      .set("Idempotency-Key", commandKey)
+      .send({
+        result: VerificationResult.VERIFIED,
+        reason: "  Evidence checked against the location.  ",
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.reason).toBe("Evidence checked against the location.");
+    expect(repository.commands[0]?.reason).toBe("Evidence checked against the location.");
+  });
+
   it("rejects with a valid reason and validates malformed decision input", async () => {
     const { app } = createVerificationApp();
     const rejected = await officerRequest(app)
