@@ -11,6 +11,14 @@ const decisionBodySchema = z
   .object({ result: verificationResultSchema, reason: z.string().optional() })
   .strict();
 
+function parseReportIdParam(params: Record<string, unknown>): string {
+  const parsed = reportIdParamsSchema.safeParse(params);
+  if (!parsed.success) {
+    throw new ReportNotFoundError(String(params.reportId ?? "unknown"));
+  }
+  return parsed.data.reportId;
+}
+
 function mapFeatureError(error: unknown): Error {
   if (error instanceof ReportNotFoundError) {
     return new HttpError(404, "NOT_FOUND", "The requested resource was not found.");
@@ -46,7 +54,7 @@ export class VerificationController {
 
   public readonly getReportForReview: RequestHandler = async (request, response, next) => {
     try {
-      const { reportId } = reportIdParamsSchema.parse(request.params);
+      const reportId = parseReportIdParam(request.params);
       response.status(200).json(await this.service.getReportForReview(reportId));
     } catch (error) {
       next(mapFeatureError(error));
@@ -55,7 +63,7 @@ export class VerificationController {
 
   public readonly decideReport: RequestHandler = async (request, response, next) => {
     try {
-      const { reportId } = reportIdParamsSchema.parse(request.params);
+      const reportId = parseReportIdParam(request.params);
       const idempotencyKey = request.header("Idempotency-Key");
       uuidSchema.parse(idempotencyKey);
       const body = decisionBodySchema.parse(request.body);
