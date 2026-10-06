@@ -3,12 +3,19 @@ import { describe, expect, it, vi } from "vitest";
 import { PrismaHazardVerificationRepository } from "./hazard-verification.repository.js";
 
 function prismaStub() {
-  return {
+  const prisma = {
     hazardReport: {
       findMany: vi.fn(async () => []),
       findUnique: vi.fn(async () => null),
+      updateMany: vi.fn(async () => ({ count: 0 })),
     },
+    verificationDecision: {
+      create: vi.fn(),
+    },
+    $transaction: vi.fn(),
   };
+  prisma.$transaction.mockImplementation(async (operation) => operation(prisma));
+  return prisma;
 }
 
 describe("PrismaHazardVerificationRepository", () => {
@@ -72,5 +79,36 @@ describe("PrismaHazardVerificationRepository", () => {
     await expect(
       repository.findReportForReview("40000000-0000-4000-8000-000000000099"),
     ).resolves.toBeNull();
+  });
+
+  it("uses one transaction to conditionally transition and audit a pending report", async () => {
+    const prisma = prismaStub();
+    prisma.hazardReport.updateMany.mockResolvedValue({ count: 1 });
+    prisma.verificationDecision.create.mockResolvedValue({
+      id: "42000000-0000-4000-8000-000000000001",
+      reportId: "40000000-0000-4000-8000-000000000001",
+      officerId: "10000000-0000-4000-8000-000000000003",
+      result: ReportStatus.VERIFIED,
+      reason: null,
+      decidedAt: new Date("2026-10-05T10:00:00.000Z"),
+    });
+    const repository = new PrismaHazardVerificationRepository(prisma as never);
+
+    await expect(
+      repository.decidePendingReport({
+        reportId: "40000000-0000-4000-8000-000000000001",
+        officerId: "10000000-0000-4000-8000-000000000003",
+        result: ReportStatus.VERIFIED,
+        decidedAt: new Date("2026-10-05T10:00:00.000Z"),
+      }),
+    ).resolves.toMatchObject({ kind: "DECIDED", decision: { reason: null } });
+    expect(prisma.$transaction).toHaveBeenCalledOnce();
+    expect(prisma.hazardReport.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "40000000-0000-4000-8000-000000000001", status: ReportStatus.PENDING },
+        data: { status: ReportStatus.VERIFIED },
+      }),
+    );
+    expect(prisma.verificationDecision.create).toHaveBeenCalledOnce();
   });
 });
