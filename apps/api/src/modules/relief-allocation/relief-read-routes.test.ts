@@ -190,17 +190,13 @@ describe("relief read routes", () => {
     });
   });
 
-  it("does not mount the allocation POST or idempotency lookup routes", async () => {
+  it("does not mount the allocation POST route", async () => {
     const app = testApp();
     const allocation = await request(app)
       .post(`/api/v1/relief-requests/${ids.request}/allocations`)
       .set(DEVELOPMENT_USER_HEADER, ids.districtOfficer)
       .send({});
-    const lookup = await request(app)
-      .get("/api/v1/allocations/by-idempotency-key/00000000-0000-4000-8000-000000000001")
-      .set(DEVELOPMENT_USER_HEADER, ids.districtOfficer);
 
     expect(allocation.status).toBe(404);
-    expect(lookup.status).toBe(404);
   });
 });

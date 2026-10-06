@@ -243,7 +243,7 @@ Stable conflict codes:
 
 ### `GET /allocations/by-idempotency-key/{key}`
 
-Returns the officer's committed allocation receipt after an uncertain network result. It must not expose another officer's commands.
+Returns the authenticated District Officer's authoritative committed allocation receipt after an uncertain network result. Lookup is scoped by trusted `officerId` plus the UUID idempotency key; a missing key or a key owned by another officer returns `404` without disclosure. Receipt reconstruction uses persisted allocation items, resupply records correlated by the exact command commit timestamp and unique request supply item, optional dispatch data and the persisted request state. This recovery operation is read-only.
 
 ## Database constraints
 

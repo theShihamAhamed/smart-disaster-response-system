@@ -1,5 +1,6 @@
 import {
   PartnerOrganisationType,
+  PartnerResupplyStatus,
   PrismaClient,
   ReliefRequestStatus,
   RescueTeamStatus,
@@ -9,6 +10,7 @@ import {
 } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { PrismaReliefAllocationCommandRepository } from "./prisma-relief-command-repository.js";
 import { PrismaReliefReadRepository } from "./prisma-relief-read-repository.js";
 
 function isIsolatedPostgres(urlValue: string | undefined): boolean {
@@ -37,6 +39,7 @@ const ids = {
   district: "f0000000-0000-4000-8000-000000000001",
   otherDistrict: "f0000000-0000-4000-8000-000000000002",
   officer: "f1000000-0000-4000-8000-000000000001",
+  otherOfficer: "f1000000-0000-4000-8000-000000000002",
   shelterLocation: "f2000000-0000-4000-8000-000000000001",
   teamLocation: "f2000000-0000-4000-8000-000000000002",
   otherLocation: "f2000000-0000-4000-8000-000000000003",
@@ -52,7 +55,11 @@ const ids = {
   otherRequestItem: "f7100000-0000-4000-8000-000000000003",
   stock: "f7200000-0000-4000-8000-000000000001",
   allocation: "f7300000-0000-4000-8000-000000000001",
+  otherAllocation: "f7300000-0000-4000-8000-000000000002",
   allocationItem: "f7400000-0000-4000-8000-000000000001",
+  otherAllocationItem: "f7400000-0000-4000-8000-000000000002",
+  partnerResupply: "f7600000-0000-4000-8000-000000000001",
+  dispatch: "f7700000-0000-4000-8000-000000000001",
   partner: "f8000000-0000-4000-8000-000000000001",
   inactivePartner: "f8000000-0000-4000-8000-000000000002",
   otherPartner: "f8000000-0000-4000-8000-000000000003",
@@ -63,8 +70,14 @@ const ids = {
 
 async function cleanup(): Promise<void> {
   await prisma.$transaction([
-    prisma.allocationItem.deleteMany({ where: { id: ids.allocationItem } }),
-    prisma.resourceAllocation.deleteMany({ where: { id: ids.allocation } }),
+    prisma.transportDispatch.deleteMany({ where: { id: ids.dispatch } }),
+    prisma.partnerResupplyRequest.deleteMany({ where: { id: ids.partnerResupply } }),
+    prisma.allocationItem.deleteMany({
+      where: { id: { in: [ids.allocationItem, ids.otherAllocationItem] } },
+    }),
+    prisma.resourceAllocation.deleteMany({
+      where: { id: { in: [ids.allocation, ids.otherAllocation] } },
+    }),
     prisma.reliefRequestItem.deleteMany({
       where: {
         id: { in: [ids.requestItem, ids.allocatedRequestItem, ids.otherRequestItem] },
@@ -85,8 +98,10 @@ async function cleanup(): Promise<void> {
     prisma.location.deleteMany({
       where: { id: { in: [ids.shelterLocation, ids.teamLocation, ids.otherLocation] } },
     }),
-    prisma.districtOfficer.deleteMany({ where: { userId: ids.officer } }),
-    prisma.user.deleteMany({ where: { id: ids.officer } }),
+    prisma.districtOfficer.deleteMany({
+      where: { userId: { in: [ids.officer, ids.otherOfficer] } },
+    }),
+    prisma.user.deleteMany({ where: { id: { in: [ids.officer, ids.otherOfficer] } } }),
   ]);
 }
 
@@ -102,6 +117,15 @@ describeIntegration("Prisma relief read repository against isolated PostgreSQL",
         contactNo: "+94770000999",
         role: UserRole.DISTRICT_OFFICER,
         districtOfficer: { create: { districtId: ids.district } },
+      },
+    });
+    await prisma.user.create({
+      data: {
+        id: ids.otherOfficer,
+        name: "Other Integration District Officer",
+        contactNo: "+94770000998",
+        role: UserRole.DISTRICT_OFFICER,
+        districtOfficer: { create: { districtId: ids.otherDistrict } },
       },
     });
     await prisma.location.createMany({
@@ -223,6 +247,7 @@ describeIntegration("Prisma relief read repository against isolated PostgreSQL",
         },
       ],
     });
+    const allocationCreatedAt = new Date("2026-09-25T11:00:00.000Z");
     await prisma.resourceAllocation.create({
       data: {
         id: ids.allocation,
@@ -230,13 +255,31 @@ describeIntegration("Prisma relief read repository against isolated PostgreSQL",
         officerId: ids.officer,
         idempotencyKey: "f7500000-0000-4000-8000-000000000001",
         notes: "Integration allocation",
-        createdAt: new Date("2026-09-25T11:00:00.000Z"),
+        createdAt: allocationCreatedAt,
         items: {
           create: {
             id: ids.allocationItem,
             requestItemId: ids.requestItem,
             supplyType: SupplyType.WATER,
             allocatedQty: 40,
+          },
+        },
+      },
+    });
+    await prisma.resourceAllocation.create({
+      data: {
+        id: ids.otherAllocation,
+        requestId: ids.otherRequest,
+        officerId: ids.otherOfficer,
+        idempotencyKey: "f7500000-0000-4000-8000-000000000001",
+        notes: "Other officer allocation with the same scoped key",
+        createdAt: allocationCreatedAt,
+        items: {
+          create: {
+            id: ids.otherAllocationItem,
+            requestItemId: ids.otherRequestItem,
+            supplyType: SupplyType.WATER,
+            allocatedQty: 10,
           },
         },
       },
@@ -276,6 +319,17 @@ describeIntegration("Prisma relief read repository against isolated PostgreSQL",
         },
       ],
     });
+    await prisma.partnerResupplyRequest.create({
+      data: {
+        id: ids.partnerResupply,
+        reliefRequestId: ids.request,
+        partnerOrganisationId: ids.partner,
+        supplyType: SupplyType.WATER,
+        requestedQty: 60,
+        status: PartnerResupplyStatus.REQUESTED,
+        createdAt: allocationCreatedAt,
+      },
+    });
     await prisma.rescueTeam.createMany({
       data: [
         {
@@ -303,6 +357,15 @@ describeIntegration("Prisma relief read repository against isolated PostgreSQL",
           version: 1,
         },
       ],
+    });
+    await prisma.transportDispatch.create({
+      data: {
+        id: ids.dispatch,
+        allocationId: ids.allocation,
+        rescueTeamId: ids.enRouteTeam,
+        destinationLocationId: ids.shelterLocation,
+        dispatchedAt: allocationCreatedAt,
+      },
     });
   });
 
@@ -338,5 +401,48 @@ describeIntegration("Prisma relief read repository against isolated PostgreSQL",
     const shelterAfter = await prisma.shelter.findUniqueOrThrow({ where: { id: ids.shelter } });
     expect(shelterAfter.currentOccupancy).toBe(shelterBefore.currentOccupancy);
     expect(shelterAfter.capacity).toBe(shelterBefore.capacity);
+  });
+
+  it("verifies officer-scoped recovery, persisted receipt relationships, and same-key isolation", async () => {
+    const repository = new PrismaReliefAllocationCommandRepository(prisma);
+    const key = "f7500000-0000-4000-8000-000000000001";
+
+    const own = await repository.findByOfficerAndIdempotencyKey(ids.officer, key);
+    const other = await repository.findByOfficerAndIdempotencyKey(ids.otherOfficer, key);
+    const missing = await repository.findByOfficerAndIdempotencyKey(
+      "f1000000-0000-4000-8000-000000000099",
+      key,
+    );
+
+    expect(own).toEqual(
+      expect.objectContaining({
+        allocationId: ids.allocation,
+        officerId: ids.officer,
+        requestId: ids.request,
+        allocationItems: [
+          expect.objectContaining({ requestItemId: ids.requestItem, allocatedQty: 40 }),
+        ],
+        resupplyRequests: [
+          expect.objectContaining({
+            id: ids.partnerResupply,
+            partnerOrganisationId: ids.partner,
+            requestedQty: 60,
+          }),
+        ],
+        dispatch: expect.objectContaining({
+          id: ids.dispatch,
+          rescueTeamId: ids.enRouteTeam,
+          teamStatus: RescueTeamStatus.EN_ROUTE,
+        }),
+      }),
+    );
+    expect(other).toEqual(
+      expect.objectContaining({
+        allocationId: ids.otherAllocation,
+        officerId: ids.otherOfficer,
+        requestId: ids.otherRequest,
+      }),
+    );
+    expect(missing).toBeNull();
   });
 });
