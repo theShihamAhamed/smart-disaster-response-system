@@ -57,6 +57,7 @@ async function selectReport(
   const dashboard = within(container);
   fireEvent.click(await dashboard.findByRole("button", { name }));
   await dashboard.findByText(description);
+  fireEvent.load(dashboard.getByAltText(/submitted evidence/i));
   return dashboard;
 }
 
@@ -82,6 +83,20 @@ describe("VerificationDashboard", () => {
     expect(screen.getByText(/advisory only/i)).toBeInTheDocument();
     expect(screen.getByText("district-1")).toBeInTheDocument();
     expect(screen.getByAltText(/submitted evidence/i)).toBeInTheDocument();
+  });
+  it("enables Verify and Reject only after evidence loads successfully", async () => {
+    const view = render(<VerificationDashboard api={api()} />);
+    const dashboard = within(view.container);
+    fireEvent.click(await dashboard.findByRole("button", { name: /flood/i }));
+    await dashboard.findByText(review.description);
+
+    expect(dashboard.getByRole("button", { name: "Verify" })).toBeDisabled();
+    expect(dashboard.getByRole("button", { name: "Reject" })).toBeDisabled();
+
+    fireEvent.load(dashboard.getByAltText(/submitted evidence/i));
+
+    expect(dashboard.getByRole("button", { name: "Verify" })).toBeEnabled();
+    expect(dashboard.getByRole("button", { name: "Reject" })).toBeEnabled();
   });
   it("shows queue and review errors", async () => {
     render(
@@ -123,7 +138,9 @@ describe("VerificationDashboard", () => {
     expect(escalateReport).not.toHaveBeenCalled();
   });
   it("retries the same evidence without changing the pending review state", async () => {
-    const view = render(<VerificationDashboard api={api()} />);
+    const escalateReport = vi.fn();
+    const client = { ...api(), escalateReport };
+    const view = render(<VerificationDashboard api={client} />);
     const dashboard = within(view.container);
     fireEvent.click(await dashboard.findByRole("button", { name: /flood/i }));
     const evidence = await dashboard.findByAltText(/submitted evidence/i);
@@ -131,20 +148,32 @@ describe("VerificationDashboard", () => {
     expect(await dashboard.findByText(/evidence photo is unavailable/i)).toBeInTheDocument();
     expect(dashboard.getByText("Awaiting officer decision")).toBeInTheDocument();
     expect(dashboard.getByText("PENDING")).toBeInTheDocument();
+    expect(dashboard.getByRole("button", { name: "Verify" })).toBeDisabled();
+    expect(dashboard.getByRole("button", { name: "Reject" })).toBeDisabled();
     expect(
       dashboard.queryByRole("button", { name: /escalate|broadcast/i }),
     ).not.toBeInTheDocument();
     fireEvent.click(dashboard.getByRole("button", { name: /retry evidence/i }));
     expect(dashboard.queryByText(/evidence photo is unavailable/i)).not.toBeInTheDocument();
-    expect(dashboard.getByAltText(/submitted evidence/i)).toHaveAttribute("src", "photo.jpg");
+    const retriedEvidence = dashboard.getByAltText(/submitted evidence/i);
+    expect(retriedEvidence).toHaveAttribute("src", "photo.jpg");
+    expect(retriedEvidence).not.toBe(evidence);
+    expect(dashboard.getByRole("button", { name: "Verify" })).toBeDisabled();
+    expect(dashboard.getByRole("button", { name: "Reject" })).toBeDisabled();
     expect(dashboard.getByText(review.description)).toBeInTheDocument();
+    expect(client.decideReport).not.toHaveBeenCalled();
+    expect(escalateReport).not.toHaveBeenCalled();
+
+    fireEvent.load(retriedEvidence);
+
+    expect(dashboard.getByRole("button", { name: "Verify" })).toBeEnabled();
+    expect(dashboard.getByRole("button", { name: "Reject" })).toBeEnabled();
+    expect(dashboard.getByText("PENDING")).toBeInTheDocument();
   });
   it("submits a verified decision without an officer identity", async () => {
     const client = api();
     const view = render(<VerificationDashboard api={client} />);
-    const dashboard = within(view.container);
-    fireEvent.click(await dashboard.findByRole("button", { name: /flood/i }));
-    await dashboard.findByText(review.description);
+    const dashboard = await selectReport(view.container, /flood/i);
     fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
     await waitFor(() =>
       expect(client.decideReport).toHaveBeenCalledWith(
@@ -157,9 +186,7 @@ describe("VerificationDashboard", () => {
   it("submits a rejected decision without an officer identity", async () => {
     const client = api();
     const view = render(<VerificationDashboard api={client} />);
-    const dashboard = within(view.container);
-    fireEvent.click(await dashboard.findByRole("button", { name: /flood/i }));
-    await dashboard.findByText(review.description);
+    const dashboard = await selectReport(view.container, /flood/i);
     fireEvent.click(dashboard.getByRole("button", { name: "Reject" }));
     const textarea = dashboard.getByRole("textbox", { name: /rejection reason/i });
     fireEvent.change(textarea, { target: { value: "  valid reason  " } });
@@ -398,6 +425,11 @@ describe("VerificationDashboard", () => {
     await dashboard.findByRole("alert");
     fireEvent.click(await dashboard.findByRole("button", { name: /landslide/i }));
     await dashboard.findByText(secondReview.description);
+    expect(dashboard.getByRole("button", { name: "Verify" })).toBeDisabled();
+    expect(dashboard.getByRole("button", { name: "Reject" })).toBeDisabled();
+    fireEvent.load(dashboard.getByAltText(/submitted evidence/i));
+    expect(dashboard.getByRole("button", { name: "Verify" })).toBeEnabled();
+    expect(dashboard.getByRole("button", { name: "Reject" })).toBeEnabled();
     fireEvent.click(dashboard.getByRole("button", { name: "Verify" }));
     await waitFor(() => expect(client.decideReport).toHaveBeenCalledTimes(2));
 

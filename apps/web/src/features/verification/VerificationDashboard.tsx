@@ -16,6 +16,7 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
   const [review, setReview] = useState<ReportReview | null>(null);
   const [reviewError, setReviewError] = useState(false);
   const [reviewAttempt, setReviewAttempt] = useState(0);
+  const [evidenceLoaded, setEvidenceLoaded] = useState(false);
   const [evidenceFailed, setEvidenceFailed] = useState(false);
   const [evidenceAttempt, setEvidenceAttempt] = useState(0);
   const [rejecting, setRejecting] = useState(false);
@@ -43,6 +44,7 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
     if (!selectedId) return;
     setReview(null);
     setReviewError(false);
+    setEvidenceLoaded(false);
     setEvidenceFailed(false);
     void api
       .getReportForReview(selectedId)
@@ -51,7 +53,7 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
   }, [api, selectedId, reviewAttempt]);
 
   const decide = async (result: "VERIFIED" | "REJECTED") => {
-    if (!review || submitting) return;
+    if (!review || submitting || !evidenceLoaded) return;
     const trimmed = reason.trim();
     if (result === "REJECTED" && (trimmed.length < 10 || trimmed.length > 500)) {
       setDecisionError("A rejection reason must contain 10 to 500 characters.");
@@ -125,6 +127,8 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
                     setReason("");
                     setDecisionError(undefined);
                   }
+                  setEvidenceLoaded(false);
+                  setEvidenceFailed(false);
                   setSelectedId(report.id);
                 }}
               >
@@ -182,13 +186,21 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
               src={review.photoRef}
               alt={`Submitted evidence for ${review.hazardType}`}
               hidden={evidenceFailed}
-              onError={() => setEvidenceFailed(true)}
+              onLoad={() => {
+                setEvidenceLoaded(true);
+                setEvidenceFailed(false);
+              }}
+              onError={() => {
+                setEvidenceLoaded(false);
+                setEvidenceFailed(true);
+              }}
             />
             {evidenceFailed && (
               <p role="alert">
                 Evidence photo is unavailable. The report remains pending.{" "}
                 <button
                   onClick={() => {
+                    setEvidenceLoaded(false);
                     setEvidenceFailed(false);
                     setEvidenceAttempt((attempt) => attempt + 1);
                   }}
@@ -198,10 +210,13 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
               </p>
             )}
             <section aria-label="Decision actions">
-              <button disabled={submitting} onClick={() => void decide("VERIFIED")}>
+              <button
+                disabled={submitting || !evidenceLoaded}
+                onClick={() => void decide("VERIFIED")}
+              >
                 Verify
               </button>
-              <button disabled={submitting} onClick={() => setRejecting(true)}>
+              <button disabled={submitting || !evidenceLoaded} onClick={() => setRejecting(true)}>
                 Reject
               </button>
               {rejecting && (
@@ -210,7 +225,10 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
                     Rejection reason
                     <textarea value={reason} onChange={(event) => setReason(event.target.value)} />
                   </label>
-                  <button disabled={submitting} onClick={() => void decide("REJECTED")}>
+                  <button
+                    disabled={submitting || !evidenceLoaded}
+                    onClick={() => void decide("REJECTED")}
+                  >
                     Confirm rejection
                   </button>
                 </>
