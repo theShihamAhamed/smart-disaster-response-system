@@ -7,11 +7,15 @@ import {
 } from "./development-auth.js";
 import { createWebCors } from "./cors.js";
 import { errorEnvelope, errorHandler } from "./errors.js";
+import { PrismaHazardVerificationRepository } from "./modules/hazard-verification/hazard-verification.repository.js";
+import { HazardVerificationService } from "./modules/hazard-verification/hazard-verification.service.js";
+import { createVerificationRouter } from "./modules/hazard-verification/verification.routes.js";
 import { prisma } from "./prisma.js";
 import { requestId } from "./request-id.js";
 
 export interface AppDependencies {
   readonly resolveDevelopmentAuthUser?: ResolveDevelopmentAuthUser;
+  readonly verificationService?: HazardVerificationService;
 }
 
 export function createApp(dependencies: AppDependencies = {}) {
@@ -30,6 +34,10 @@ export function createApp(dependencies: AppDependencies = {}) {
   const resolveDevelopmentAuthUser =
     dependencies.resolveDevelopmentAuthUser ?? createPrismaDevelopmentAuthResolver(prisma);
   app.use(createDevelopmentAuthContext(resolveDevelopmentAuthUser));
+  const verificationService =
+    dependencies.verificationService ??
+    new HazardVerificationService(new PrismaHazardVerificationRepository(prisma));
+  app.use(`${API_BASE_PATH}/verification`, createVerificationRouter(verificationService));
 
   app.use((_request, response) => {
     response.status(404).json(errorEnvelope("NOT_FOUND", "The requested resource was not found."));
