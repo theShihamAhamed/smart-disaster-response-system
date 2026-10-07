@@ -9,6 +9,12 @@ export function createReliefCommandRouter(service: ReliefCommandOperations): Rou
   const router = Router();
   const controller = createReliefCommandController(service);
 
+  router.post(
+    "/relief-requests/:requestId/allocations",
+    requireRoles(UserRole.DISTRICT_OFFICER),
+    controller.allocateReliefResources,
+  );
+
   router.get(
     "/allocations/by-idempotency-key/:key",
     requireRoles(UserRole.DISTRICT_OFFICER),

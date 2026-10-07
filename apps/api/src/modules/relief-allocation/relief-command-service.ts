@@ -228,6 +228,26 @@ export class ReliefAllocationCommandService implements ReliefCommandOperations {
     }
   }
 
+  private replayExisting(
+    existing: PersistedReliefAllocation,
+    input: AllocateReliefResourcesInput,
+  ): ReliefAllocationExecutionResult {
+    if (
+      existing.officerId !== input.actor.officerId ||
+      existing.idempotencyKey !== input.idempotencyKey
+    ) {
+      throw integrityError();
+    }
+    const incomingIntent = canonicalizeAllocationIntent(input.requestId, input.command);
+    if (canonicalizePersistedIntent(existing) !== incomingIntent) {
+      throw new ReliefCommandError(
+        "IDEMPOTENCY_MISMATCH",
+        "The idempotency key is already associated with a different allocation intent.",
+      );
+    }
+    return { kind: "REPLAYED", receipt: reconstructReceipt(existing) };
+  }
+
   public async getReceiptByIdempotencyKey(
     actor: ReliefCommandActor,
     idempotencyKey: string,
@@ -250,20 +270,7 @@ export class ReliefAllocationCommandService implements ReliefCommandOperations {
   ): Promise<ReliefAllocationExecutionResult> {
     const existing = await this.findExisting(input.actor.officerId, input.idempotencyKey);
     if (existing) {
-      if (
-        existing.officerId !== input.actor.officerId ||
-        existing.idempotencyKey !== input.idempotencyKey
-      ) {
-        throw integrityError();
-      }
-      const incomingIntent = canonicalizeAllocationIntent(input.requestId, input.command);
-      if (canonicalizePersistedIntent(existing) !== incomingIntent) {
-        throw new ReliefCommandError(
-          "IDEMPOTENCY_MISMATCH",
-          "The idempotency key is already associated with a different allocation intent.",
-        );
-      }
-      return { kind: "REPLAYED", receipt: reconstructReceipt(existing) };
+      return this.replayExisting(existing, input);
     }
 
     const prepared = validatedFreshCommand(input);
@@ -274,7 +281,18 @@ export class ReliefAllocationCommandService implements ReliefCommandOperations {
       );
     }
 
-    const receipt = await this.transactionPort.execute(prepared);
-    return { kind: "CREATED", receipt };
+    const transactionResult = await this.transactionPort.execute(prepared);
+    const committed = await this.findExisting(input.actor.officerId, input.idempotencyKey);
+    if (!committed) {
+      throw new ReliefCommandError(
+        "ALLOCATION_DEPENDENCY_UNAVAILABLE",
+        "The committed allocation could not be recovered safely.",
+      );
+    }
+
+    const recovered = this.replayExisting(committed, input);
+    return transactionResult.kind === "COMMITTED"
+      ? { kind: "CREATED", receipt: recovered.receipt }
+      : recovered;
   }
 }

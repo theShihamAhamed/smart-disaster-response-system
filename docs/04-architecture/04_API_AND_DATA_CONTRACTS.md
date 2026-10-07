@@ -209,6 +209,8 @@ Header: `Idempotency-Key: <allocation-command-uuid>`
 
 The client sends partner selections, not trusted shortage quantities. The server recalculates every shortage after re-reading stock and outstanding demand. Idempotency is scoped by the trusted officer ID plus the `Idempotency-Key`; `requestVersion` is an optimistic-concurrency precondition and is excluded from canonical business-intent comparison.
 
+The operation commits stock deductions, allocation evidence, partner resupply, request state/version and optional rescue dispatch in one Serializable PostgreSQL transaction. Transient transaction conflicts are retried no more than twice after the original attempt; typed business conflicts are never retried.
+
 Response `201`, or `200` for an idempotent repeat:
 
 ```json

@@ -190,13 +190,14 @@ describe("relief read routes", () => {
     });
   });
 
-  it("does not mount the allocation POST route", async () => {
+  it("mounts the allocation POST route behind command validation", async () => {
     const app = testApp();
     const allocation = await request(app)
       .post(`/api/v1/relief-requests/${ids.request}/allocations`)
       .set(DEVELOPMENT_USER_HEADER, ids.districtOfficer)
       .send({});
 
-    expect(allocation.status).toBe(404);
+    expect(allocation.status).toBe(422);
+    expect(allocation.body.error.code).toBe("VALIDATION_ERROR");
   });
 });

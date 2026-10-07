@@ -1,4 +1,9 @@
-import { reliefAllocationLookupPathParamsSchema } from "@disaster/shared-validation";
+import {
+  reliefAllocationCommandSchema,
+  reliefAllocationHeadersSchema,
+  reliefAllocationLookupPathParamsSchema,
+  reliefRequestPathParamsSchema,
+} from "@disaster/shared-validation";
 import type { RequestHandler } from "express";
 
 import { HttpError } from "../../errors.js";
@@ -21,9 +26,15 @@ function actorFrom(response: Parameters<RequestHandler>[1]): ReliefCommandActor 
 export function reliefCommandErrorToHttp(error: ReliefCommandError): HttpError {
   switch (error.code) {
     case "ALLOCATION_NOT_FOUND":
+    case "RELIEF_REQUEST_NOT_FOUND":
       return new HttpError(404, error.code, error.message);
     case "IDEMPOTENCY_MISMATCH":
     case "ALLOCATION_DATA_INTEGRITY_ERROR":
+    case "REQUEST_ALREADY_ALLOCATED":
+    case "REQUEST_CHANGED":
+    case "STOCK_CHANGED":
+    case "PARTNER_REQUIRED":
+    case "TEAM_UNAVAILABLE":
       return new HttpError(409, error.code, error.message);
     case "INVALID_ALLOCATION_COMMAND":
       return new HttpError(422, error.code, error.message);
@@ -34,6 +45,34 @@ export function reliefCommandErrorToHttp(error: ReliefCommandError): HttpError {
 }
 
 export function createReliefCommandController(service: ReliefCommandOperations) {
+  const allocateReliefResources: RequestHandler = async (request, response, next) => {
+    try {
+      const { requestId } = reliefRequestPathParamsSchema.parse(request.params);
+      const { "idempotency-key": idempotencyKey } = reliefAllocationHeadersSchema.parse({
+        "idempotency-key": request.get("Idempotency-Key"),
+      });
+      const parsedCommand = reliefAllocationCommandSchema.parse(request.body);
+      const command = {
+        requestVersion: parsedCommand.requestVersion,
+        items: parsedCommand.items,
+        shortages: parsedCommand.shortages,
+        ...(parsedCommand.rescueTeamId === undefined
+          ? {}
+          : { rescueTeamId: parsedCommand.rescueTeamId }),
+        ...(parsedCommand.notes === undefined ? {} : { notes: parsedCommand.notes }),
+      };
+      const result = await service.allocateReliefResources({
+        actor: actorFrom(response),
+        requestId,
+        idempotencyKey,
+        command,
+      });
+      response.status(result.kind === "CREATED" ? 201 : 200).json(result.receipt);
+    } catch (error) {
+      next(error instanceof ReliefCommandError ? reliefCommandErrorToHttp(error) : error);
+    }
+  };
+
   const getReceiptByIdempotencyKey: RequestHandler = async (request, response, next) => {
     try {
       const { key } = reliefAllocationLookupPathParamsSchema.parse(request.params);
@@ -44,5 +83,5 @@ export function createReliefCommandController(service: ReliefCommandOperations) 
     }
   };
 
-  return { getReceiptByIdempotencyKey } as const;
+  return { allocateReliefResources, getReceiptByIdempotencyKey } as const;
 }

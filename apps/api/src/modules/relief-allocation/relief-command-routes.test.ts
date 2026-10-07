@@ -20,6 +20,7 @@ const ids = {
   dmcOfficer: "10000000-0000-4000-8000-000000000003",
   key: "20000000-0000-4000-8000-000000000001",
   request: "70000000-0000-4000-8000-000000000001",
+  requestItem: "71000000-0000-4000-8000-000000000001",
 } as const;
 
 const users: Readonly<Record<string, DevelopmentAuthUser>> = {
@@ -76,6 +77,12 @@ function service(overrides: Partial<ReliefCommandOperations> = {}) {
 function testApp(reliefCommandService: ReliefCommandOperations = service()) {
   return createApp({ resolveDevelopmentAuthUser: resolveUser, reliefCommandService });
 }
+
+const validCommand = {
+  requestVersion: 1,
+  items: [{ requestItemId: ids.requestItem, allocateQty: 10 }],
+  shortages: [],
+};
 
 beforeEach(() => {
   vi.stubEnv("DEV_AUTH_ENABLED", "true");
@@ -182,14 +189,95 @@ describe("allocation idempotency recovery route", () => {
     });
   });
 
-  it("keeps the incomplete allocation POST route unmounted", async () => {
+  it("creates an allocation from the trusted District Officer context", async () => {
     const commandService = service();
     const response = await request(testApp(commandService))
       .post(`/api/v1/relief-requests/${ids.request}/allocations`)
       .set(DEVELOPMENT_USER_HEADER, ids.districtOfficer)
-      .send({});
+      .set("Idempotency-Key", ids.key)
+      .send(validCommand);
 
-    expect(response.status).toBe(404);
-    expect(commandService.allocateReliefResources).not.toHaveBeenCalled();
+    expect(response.status).toBe(201);
+    expect(response.body).toEqual(storedReceipt);
+    expect(commandService.allocateReliefResources).toHaveBeenCalledWith({
+      actor: { officerId: ids.districtOfficer, districtId: ids.district },
+      requestId: ids.request,
+      idempotencyKey: ids.key,
+      command: validCommand,
+    });
+  });
+
+  it("returns 200 for an idempotent replay", async () => {
+    const commandService = service({
+      allocateReliefResources: vi.fn(async () => ({
+        kind: "REPLAYED",
+        receipt: storedReceipt,
+      })),
+    });
+    const response = await request(testApp(commandService))
+      .post(`/api/v1/relief-requests/${ids.request}/allocations`)
+      .set(DEVELOPMENT_USER_HEADER, ids.districtOfficer)
+      .set("Idempotency-Key", ids.key)
+      .send(validCommand);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(storedReceipt);
+  });
+
+  it.each([
+    ["missing authentication", undefined, ids.key, validCommand, 401, "UNAUTHENTICATED"],
+    ["wrong role", ids.dmcOfficer, ids.key, validCommand, 403, "FORBIDDEN"],
+    [
+      "missing idempotency key",
+      ids.districtOfficer,
+      undefined,
+      validCommand,
+      422,
+      "VALIDATION_ERROR",
+    ],
+    [
+      "malformed request id",
+      ids.districtOfficer,
+      ids.key,
+      validCommand,
+      422,
+      "VALIDATION_ERROR",
+      "bad-id",
+    ],
+    ["invalid body", ids.districtOfficer, ids.key, {}, 422, "VALIDATION_ERROR"],
+  ] as const)(
+    "rejects %s",
+    async (_label, userId, key, body, status, code, requestId = ids.request) => {
+      const pending = request(testApp()).post(`/api/v1/relief-requests/${requestId}/allocations`);
+      if (userId) pending.set(DEVELOPMENT_USER_HEADER, userId);
+      if (key) pending.set("Idempotency-Key", key);
+      const response = await pending.send(body);
+
+      expect(response.status).toBe(status);
+      expect(response.body.error.code).toBe(code);
+    },
+  );
+
+  it.each([
+    "IDEMPOTENCY_MISMATCH",
+    "REQUEST_CHANGED",
+    "REQUEST_ALREADY_ALLOCATED",
+    "STOCK_CHANGED",
+    "PARTNER_REQUIRED",
+    "TEAM_UNAVAILABLE",
+  ] as const)("maps %s allocation conflicts to 409", async (code) => {
+    const commandService = service({
+      allocateReliefResources: vi.fn(async () => {
+        throw new ReliefCommandError(code, "Safe allocation conflict.");
+      }),
+    });
+    const response = await request(testApp(commandService))
+      .post(`/api/v1/relief-requests/${ids.request}/allocations`)
+      .set(DEVELOPMENT_USER_HEADER, ids.districtOfficer)
+      .set("Idempotency-Key", ids.key)
+      .send(validCommand);
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.code).toBe(code);
   });
 });

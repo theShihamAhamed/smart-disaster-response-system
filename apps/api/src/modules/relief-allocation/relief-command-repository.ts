@@ -4,7 +4,7 @@ import type {
   RescueTeamStatus,
   SupplyType,
 } from "@disaster/domain";
-import type { ReliefAllocationCommand, ReliefAllocationReceipt } from "@disaster/shared-types";
+import type { ReliefAllocationCommand } from "@disaster/shared-types";
 
 export interface PersistedRequestItemIdentity {
   readonly id: string;
@@ -64,5 +64,8 @@ export interface PreparedReliefAllocationCommand {
 }
 
 export interface ReliefAllocationTransactionPort {
-  execute(command: PreparedReliefAllocationCommand): Promise<ReliefAllocationReceipt>;
+  execute(command: PreparedReliefAllocationCommand): Promise<ReliefAllocationTransactionResult>;
 }
+
+export type ReliefAllocationTransactionResult =
+  { readonly kind: "COMMITTED" } | { readonly kind: "IDEMPOTENCY_RACE" };

@@ -4,7 +4,7 @@ import {
   RescueTeamStatus,
   SupplyType,
 } from "@disaster/domain";
-import type { ReliefAllocationCommand, ReliefAllocationReceipt } from "@disaster/shared-types";
+import type { ReliefAllocationCommand } from "@disaster/shared-types";
 import { describe, expect, it, vi } from "vitest";
 
 import type {
@@ -107,18 +107,6 @@ function command(overrides: Partial<ReliefAllocationCommand> = {}): ReliefAlloca
   };
 }
 
-function receipt(): ReliefAllocationReceipt {
-  return {
-    allocationId: "30000000-0000-4000-8000-000000000099",
-    requestId: ids.request,
-    requestStatus: ReliefRequestStatus.ALLOCATED,
-    items: [{ supplyType: SupplyType.WATER, allocatedQty: 10 }],
-    resupplyRequests: [],
-    dispatch: null,
-    createdAt: "2026-09-25T13:00:00.000Z",
-  };
-}
-
 function repository(record: PersistedReliefAllocation | null = persistedAllocation()) {
   return {
     findByOfficerAndIdempotencyKey: vi.fn<
@@ -127,7 +115,9 @@ function repository(record: PersistedReliefAllocation | null = persistedAllocati
   };
 }
 
-function transactionPort(result: ReliefAllocationReceipt = receipt()) {
+function transactionPort(
+  result: Awaited<ReturnType<ReliefAllocationTransactionPort["execute"]>> = { kind: "COMMITTED" },
+) {
   return {
     execute: vi.fn<ReliefAllocationTransactionPort["execute"]>(async () => result),
   };
@@ -319,6 +309,9 @@ describe("idempotency mismatch", () => {
 describe("fresh allocation command orchestration", () => {
   it("performs idempotency lookup first and then reaches the future transaction port", async () => {
     const repo = repository(null);
+    repo.findByOfficerAndIdempotencyKey
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(persistedAllocation());
     const port = transactionPort();
     const service = new ReliefAllocationCommandService(repo, port);
 
@@ -329,7 +322,8 @@ describe("fresh allocation command orchestration", () => {
       command: command(),
     });
 
-    expect(result).toEqual({ kind: "CREATED", receipt: receipt() });
+    expect(result.kind).toBe("CREATED");
+    expect(result.receipt.allocationId).toBe("30000000-0000-4000-8000-000000000001");
     expect(repo.findByOfficerAndIdempotencyKey).toHaveBeenCalledBefore(port.execute);
     expect(port.execute).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -341,6 +335,24 @@ describe("fresh allocation command orchestration", () => {
         canonicalIntent: expect.any(String),
       }),
     );
+  });
+
+  it("recovers a concurrent same-key commit through canonical replay", async () => {
+    const repo = repository(null);
+    repo.findByOfficerAndIdempotencyKey
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(persistedAllocation());
+    const port = transactionPort({ kind: "IDEMPOTENCY_RACE" });
+
+    const result = await new ReliefAllocationCommandService(repo, port).allocateReliefResources({
+      actor,
+      requestId: ids.request,
+      idempotencyKey: ids.key,
+      command: command(),
+    });
+
+    expect(result.kind).toBe("REPLAYED");
+    expect(result.receipt.allocationId).toBe("30000000-0000-4000-8000-000000000001");
   });
 
   it("never reports a fresh command as committed without a transaction port", async () => {

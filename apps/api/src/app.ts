@@ -8,6 +8,7 @@ import {
 import { createWebCors } from "./cors.js";
 import { errorEnvelope, errorHandler } from "./errors.js";
 import { PrismaReliefAllocationCommandRepository } from "./modules/relief-allocation/prisma-relief-command-repository.js";
+import { PrismaReliefAllocationTransaction } from "./modules/relief-allocation/prisma-relief-allocation-transaction.js";
 import { createReliefCommandRouter } from "./modules/relief-allocation/relief-command-router.js";
 import {
   ReliefAllocationCommandService,
@@ -49,9 +50,13 @@ export function createApp(dependencies: AppDependencies = {}) {
     dependencies.reliefReadService ?? new ReliefReadService(new PrismaReliefReadRepository(prisma));
   app.use(API_BASE_PATH, createReliefReadRouter(reliefReadService));
 
+  const reliefCommandRepository = new PrismaReliefAllocationCommandRepository(prisma);
   const reliefCommandService =
     dependencies.reliefCommandService ??
-    new ReliefAllocationCommandService(new PrismaReliefAllocationCommandRepository(prisma));
+    new ReliefAllocationCommandService(
+      reliefCommandRepository,
+      new PrismaReliefAllocationTransaction(prisma),
+    );
   app.use(API_BASE_PATH, createReliefCommandRouter(reliefCommandService));
 
   app.use((_request, response) => {
