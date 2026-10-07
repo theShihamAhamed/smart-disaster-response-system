@@ -1,11 +1,11 @@
 import type { ConnectivityProvider } from "../ports/connectivity-provider";
 import {
   HazardReportHttpError,
-  isRetryable,
+  isRetryableStatus,
   type HazardReportApi,
 } from "../ports/hazard-report-api";
-import type { OfflineReportRepository } from "../repositories/offline-report-repository.ts";
-import type { PhotoRepository } from "../repositories/photo-repository.ts";
+import type { OfflineReportRepository } from "../repositories/offline-report-repository";
+import type { PhotoRepository } from "../repositories/photo-repository";
 import type { Acknowledgement } from "../types";
 
 export type SendOutcome =
@@ -41,11 +41,9 @@ export const SYNC_MESSAGES = {
   refused: "The server could not accept this report. Please check it and send it again.",
 } as const;
 
-function describeFailure(error: unknown): string {
-  if (error instanceof HazardReportHttpError) {
-    return isRetryable(error) ? SYNC_MESSAGES.unreachable : error.message || SYNC_MESSAGES.refused;
-  }
-  return SYNC_MESSAGES.unreachable;
+/** The server clearly refused this report (for example 422), so retrying alone will not help. */
+function refusalOf(error: unknown): HazardReportHttpError | null {
+  return error instanceof HazardReportHttpError && !isRetryableStatus(error.status) ? error : null;
 }
 
 /**
@@ -127,17 +125,14 @@ export class ReportSyncService {
     try {
       response = await api.submit(report.payload, report.clientReportId);
     } catch (error) {
-      const message = describeFailure(error);
-      if (isRetryable(error)) {
-        await repository.recordFailure(clientReportId, message, false);
-        return { kind: "RETRY_LATER", message };
+      const refusal = refusalOf(error);
+      if (refusal) {
+        const message = refusal.message || SYNC_MESSAGES.refused;
+        await repository.recordFailure(clientReportId, message, true);
+        return { kind: "REJECTED", message, fieldErrors: refusal.fieldErrors };
       }
-      await repository.recordFailure(clientReportId, message, true);
-      return {
-        kind: "REJECTED",
-        message,
-        fieldErrors: error instanceof HazardReportHttpError ? error.fieldErrors : {},
-      };
+      await repository.recordFailure(clientReportId, SYNC_MESSAGES.unreachable, false);
+      return { kind: "RETRY_LATER", message: SYNC_MESSAGES.unreachable };
     }
 
     const acknowledgement: Acknowledgement = {

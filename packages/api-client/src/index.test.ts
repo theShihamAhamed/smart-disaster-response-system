@@ -126,6 +126,16 @@ describe("api client", () => {
     expect(headers.get("Content-Type")).toBe("application/json");
   });
 
+  it("rejects a request body that cannot be serialized as JSON", async () => {
+    const fetchImpl = vi.fn<typeof fetch>();
+    const client = createHttpClient({ baseUrl: "http://localhost:4000/api/v1", fetchImpl });
+
+    await expect(client.post("/resources", { body: () => undefined })).rejects.toThrow(
+      "Request body must be JSON-serializable.",
+    );
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("returns undefined for a successful response with no body", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 204 }));
     const client = createHttpClient({ baseUrl: "http://localhost:4000/api/v1", fetchImpl });
