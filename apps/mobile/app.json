@@ -6,9 +6,19 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "assetBundlePatterns": ["**/*"],
-    "android": {
-      "package": "lk.sliit.disastercoordination"
+    "plugins": ["expo-status-bar"],
+    "icon": "./assets/logo.png",
+    "splash": {
+      "image": "./assets/logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#020B18"
     },
-    "plugins": ["expo-status-bar"]
+    "android": {
+      "package": "lk.sliit.disastercoordination",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/logo.png",
+        "backgroundColor": "#020B18"
+      }
+    }
   }
 }

@@ -8,6 +8,7 @@ import {
 import { createWebCors } from "./cors.js";
 import { errorEnvelope, errorHandler } from "./errors.js";
 import { createSeedGeoAdapter } from "./modules/hazard-submission/mock-geo-adapter.js";
+import { createPhotoRouter } from "./modules/hazard-submission/photo.routes.js";
 import { PrismaHazardSubmissionRepository } from "./modules/hazard-submission/hazard-submission.repository.js";
 import { HazardSubmissionService } from "./modules/hazard-submission/hazard-submission.service.js";
 import { createHazardSubmissionRouter } from "./modules/hazard-submission/submission.routes.js";
@@ -33,6 +34,10 @@ export function createApp(dependencies: AppDependencies = {}) {
   app.use(createWebCors());
   app.use(express.json({ limit: "1mb" }));
   app.use(requestId);
+  app.use((request, _response, next) => {
+    console.log(`[request] ${request.method} ${request.originalUrl}`);
+    next();
+  });
 
   const health = (_request: express.Request, response: express.Response) => {
     response.status(200).json({ status: "ok" });
@@ -49,6 +54,7 @@ export function createApp(dependencies: AppDependencies = {}) {
       new PrismaHazardSubmissionRepository(prisma),
       createSeedGeoAdapter(),
     );
+  app.use(`${API_BASE_PATH}/hazard-reports/photos`, createPhotoRouter());
   app.use(`${API_BASE_PATH}/hazard-reports`, createHazardSubmissionRouter(submissionService));
   const verificationService =
     dependencies.verificationService ??
