@@ -20,6 +20,18 @@ export interface ReportReview extends PendingReport {
   };
 }
 
+export interface DraftAlert {
+  readonly alertId: string;
+  readonly sourceReportId: string;
+  readonly status: "DRAFT";
+  readonly version: number;
+}
+
+export interface EscalationResult {
+  readonly httpStatus: 200 | 201;
+  readonly draft: DraftAlert;
+}
+
 export interface VerificationApi {
   listPendingReports(): Promise<readonly PendingReport[]>;
   getReportForReview(reportId: string): Promise<ReportReview>;
@@ -28,14 +40,19 @@ export interface VerificationApi {
     body: { result: "VERIFIED" | "REJECTED"; reason?: string },
     idempotencyKey: string,
   ): Promise<unknown>;
+  escalateVerifiedReport(reportId: string, idempotencyKey: string): Promise<EscalationResult>;
 }
 
 export function createVerificationApi(client: {
   get<T>(path: string): Promise<T>;
   post<TResponse, TBody>(
     path: string,
-    options: { body: TBody; headers: HeadersInit },
+    options: { body?: TBody; headers: HeadersInit },
   ): Promise<TResponse>;
+  postWithResponse<TResponse, TBody>(
+    path: string,
+    options: { body?: TBody; headers: HeadersInit },
+  ): Promise<{ readonly status: number; readonly body: TResponse }>;
 }): VerificationApi {
   return {
     listPendingReports: () =>
@@ -46,5 +63,18 @@ export function createVerificationApi(client: {
         body,
         headers: { "Idempotency-Key": idempotencyKey },
       }),
+    escalateVerifiedReport: async (reportId, idempotencyKey) => {
+      if (!idempotencyKey.trim()) {
+        throw new Error("An idempotency key is required for escalation.");
+      }
+      const response = await client.postWithResponse<DraftAlert, never>(
+        `/verification/reports/${reportId}/escalations`,
+        { headers: { "Idempotency-Key": idempotencyKey } },
+      );
+      if (response.status !== 200 && response.status !== 201) {
+        throw new Error("Unexpected escalation response status.");
+      }
+      return { httpStatus: response.status, draft: response.body };
+    },
   };
 }

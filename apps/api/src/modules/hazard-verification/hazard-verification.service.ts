@@ -36,11 +36,12 @@ export class HazardVerificationService {
   }
 
   public async decideReport(input: DecideReportInput): Promise<VerificationDecisionRecord> {
-    const reason = this.validateAndNormalizeReason(input.result, input.reason);
+    const { reason: suppliedReason, ...command } = input;
+    const reason = this.validateAndNormalizeReason(input.result, suppliedReason);
     const result = await this.repository.decidePendingReport({
-      ...input,
-      decidedAt: this.now(),
+      ...command,
       ...(reason === undefined ? {} : { reason }),
+      decidedAt: this.now(),
     });
 
     if (result.kind === "DECIDED") {
@@ -60,7 +61,7 @@ export class HazardVerificationService {
       throw new ValidationError("Verification result must be VERIFIED or REJECTED.");
     }
     if (result === VerificationResult.VERIFIED) {
-      return undefined;
+      return suppliedReason?.trim() || undefined;
     }
 
     const reason = suppliedReason?.trim();
