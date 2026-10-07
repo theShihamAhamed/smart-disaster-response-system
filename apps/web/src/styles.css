@@ -569,6 +569,8 @@ button:hover {
   border-left: 4px solid #28a745;
   border-radius: 6px;
   margin: 1rem 0;
+}
+
 .verification-workspace {
   margin-top: 3rem;
 }
