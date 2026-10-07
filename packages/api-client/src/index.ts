@@ -15,6 +15,19 @@ export class ApiClientError extends Error {
   }
 }
 
+function unreadableResponseBody(
+  message = "The API returned an unreadable response.",
+): ApiErrorEnvelope {
+  return {
+    error: {
+      code: "UNREADABLE_RESPONSE",
+      message,
+      fieldErrors: {},
+      details: {},
+    },
+  };
+}
+
 export interface HttpClientOptions {
   readonly baseUrl: string;
   readonly fetchImpl?: typeof fetch;
@@ -96,7 +109,15 @@ export function createHttpClient({
       headers,
       ...(serializedBody === undefined ? {} : { body: serializedBody }),
     });
-    const responseBody = await parseResponseBody(response);
+    let responseBody: unknown;
+    try {
+      responseBody = await parseResponseBody(response);
+    } catch (error) {
+      if (response.ok) {
+        throw error;
+      }
+      throw new ApiClientError(response.status, unreadableResponseBody());
+    }
     if (!response.ok) {
       throw new ApiClientError(response.status, responseBody as ApiErrorEnvelope);
     }
@@ -148,10 +169,19 @@ export function createHttpClient({
     input: SubmitHazardReportRequest,
     idempotencyKey: string = input.clientReportId,
   ): Promise<SubmitHazardReportResponse> {
-    return post<SubmitHazardReportResponse, SubmitHazardReportRequest>("/hazard-reports", {
+    const result = await postWithResponse<
+      SubmitHazardReportResponse | undefined,
+      SubmitHazardReportRequest
+    >("/hazard-reports", {
       body: input,
       headers: { "Idempotency-Key": idempotencyKey },
     });
+
+    if (result.body === undefined) {
+      throw new ApiClientError(result.status, unreadableResponseBody());
+    }
+
+    return result.body;
   }
 
   async function getHazardReportStatus(reportId: string): Promise<HazardReportStatusResponse> {
