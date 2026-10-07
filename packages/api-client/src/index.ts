@@ -1,4 +1,9 @@
-import type { ApiErrorEnvelope, HealthResponse } from "@disaster/shared-types";
+import type {
+  ApiErrorEnvelope,
+  HazardReportStatusResponse,
+  HealthResponse,
+  SubmitHazardReportResponse,
+} from "@disaster/shared-types";
 
 export class ApiClientError extends Error {
   public constructor(
@@ -23,6 +28,18 @@ export interface JsonRequestOptions<TBody> extends Omit<RequestInit, "body" | "m
 }
 
 type SupportedMethod = "GET" | "PATCH" | "POST";
+
+export interface SubmitHazardReportRequest {
+  readonly clientReportId: string;
+  readonly hazardType: string;
+  readonly description: string;
+  readonly photoRef: string;
+  readonly location: {
+    readonly latitude: number;
+    readonly longitude: number;
+    readonly source: string;
+  };
+}
 
 export function createHttpClient({
   baseUrl,
@@ -127,5 +144,29 @@ export function createHttpClient({
     return get<HealthResponse>("/health");
   }
 
-  return { get, getHealth, patch, post, postWithResponse } as const;
+  async function submitHazardReport(
+    input: SubmitHazardReportRequest,
+    idempotencyKey: string = input.clientReportId,
+  ): Promise<SubmitHazardReportResponse> {
+    return post<SubmitHazardReportResponse, SubmitHazardReportRequest>("/hazard-reports", {
+      body: input,
+      headers: { "Idempotency-Key": idempotencyKey },
+    });
+  }
+
+  async function getHazardReportStatus(reportId: string): Promise<HazardReportStatusResponse> {
+    return get<HazardReportStatusResponse>(
+      `/hazard-reports/${encodeURIComponent(reportId)}/status`,
+    );
+  }
+
+  return {
+    get,
+    getHealth,
+    getHazardReportStatus,
+    patch,
+    post,
+    postWithResponse,
+    submitHazardReport,
+  } as const;
 }
