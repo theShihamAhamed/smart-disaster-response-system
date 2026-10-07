@@ -8,6 +8,7 @@
     "assetBundlePatterns": ["**/*"],
     "android": {
       "package": "lk.sliit.disastercoordination"
-    }
+    },
+    "plugins": ["expo-status-bar"]
   }
 }
