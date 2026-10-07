@@ -33,6 +33,14 @@ export interface HazardVerificationRepository {
   decidePendingReport(command: DecisionCommand): Promise<DecisionPersistenceResult>;
 }
 
+export interface ReporterNotificationPort {
+  requestDecisionNotification(input: {
+    readonly reportId: string;
+    readonly decision: "REJECTED";
+    readonly rejectionReason: string;
+  }): Promise<void>;
+}
+
 export interface DecisionCommand {
   readonly reportId: string;
   readonly officerId: string;

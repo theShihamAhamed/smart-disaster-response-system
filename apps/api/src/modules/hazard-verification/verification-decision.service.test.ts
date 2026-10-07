@@ -1,5 +1,5 @@
 import { ReportStatus, VerificationResult } from "@disaster/domain";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { HazardVerificationService } from "./hazard-verification.service.js";
 import type {
   DecisionCommand,
@@ -7,6 +7,7 @@ import type {
   HazardVerificationRepository,
   PendingReport,
   ReportForReview,
+  ReporterNotificationPort,
   VerificationDecisionRecord,
 } from "./types.js";
 import { ReportAlreadyProcessedError, ReportNotFoundError, ValidationError } from "./types.js";
@@ -62,16 +63,22 @@ class InMemoryDecisionRepository implements HazardVerificationRepository {
   }
 }
 
-function serviceFor(repository = new InMemoryDecisionRepository()) {
+function serviceFor(
+  repository = new InMemoryDecisionRepository(),
+  reporterNotificationPort?: ReporterNotificationPort,
+) {
   return {
     repository,
-    service: new HazardVerificationService(repository, () => decidedAt),
+    service: new HazardVerificationService(repository, () => decidedAt, reporterNotificationPort),
   };
 }
 
 describe("HazardVerificationService decision workflow", () => {
   it("atomically records a VERIFIED decision for a pending report", async () => {
-    const { repository, service } = serviceFor();
+    const requestDecisionNotification = vi.fn(async () => {});
+    const { repository, service } = serviceFor(new InMemoryDecisionRepository(), {
+      requestDecisionNotification,
+    });
 
     const decision = await service.decideReport({
       reportId,
@@ -88,6 +95,7 @@ describe("HazardVerificationService decision workflow", () => {
     });
     expect(repository.currentStatus()).toBe(ReportStatus.VERIFIED);
     expect(repository.decisions).toHaveLength(1);
+    expect(requestDecisionNotification).not.toHaveBeenCalled();
   });
 
   it("persists trimmed optional notes for a VERIFIED decision", async () => {
@@ -122,7 +130,13 @@ describe("HazardVerificationService decision workflow", () => {
   });
 
   it("records a trimmed rejection reason with officer and timestamp", async () => {
-    const { repository, service } = serviceFor();
+    const repository = new InMemoryDecisionRepository();
+    const requestDecisionNotification = vi.fn(async () => {
+      expect(repository.currentStatus()).toBe(ReportStatus.REJECTED);
+      expect(repository.decisions).toHaveLength(1);
+      expect(repository.decisions[0]?.reason).toBe("Photo is unrelated to the reported flood.");
+    });
+    const { service } = serviceFor(repository, { requestDecisionNotification });
 
     const decision = await service.decideReport({
       reportId,
@@ -138,6 +152,59 @@ describe("HazardVerificationService decision workflow", () => {
       decidedAt,
     });
     expect(repository.currentStatus()).toBe(ReportStatus.REJECTED);
+    expect(requestDecisionNotification).toHaveBeenCalledOnce();
+    expect(requestDecisionNotification).toHaveBeenCalledWith({
+      reportId,
+      decision: "REJECTED",
+      rejectionReason: "Photo is unrelated to the reported flood.",
+    });
+    expect(repository.decisions[0]?.reason).toBe("Photo is unrelated to the reported flood.");
+  });
+
+  it("keeps a committed REJECTED decision when reporter notification fails", async () => {
+    const repository = new InMemoryDecisionRepository();
+    const requestDecisionNotification = vi.fn(async () => {
+      throw new Error("Notification adapter unavailable.");
+    });
+    const logError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { service } = serviceFor(repository, { requestDecisionNotification });
+
+    const decision = await service.decideReport({
+      reportId,
+      officerId: officerOne,
+      result: VerificationResult.REJECTED,
+      reason: "  Reported location does not show a hazard.  ",
+    });
+
+    expect(decision).toMatchObject({
+      reportId,
+      result: VerificationResult.REJECTED,
+      reason: "Reported location does not show a hazard.",
+    });
+    expect(repository.currentStatus()).toBe(ReportStatus.REJECTED);
+    expect(repository.decisions).toHaveLength(1);
+    expect(requestDecisionNotification).toHaveBeenCalledOnce();
+    expect(logError).toHaveBeenCalledOnce();
+    logError.mockRestore();
+  });
+
+  it("does not request notification if the rejection transaction fails", async () => {
+    const repository = new InMemoryDecisionRepository();
+    repository.failNextDecision = true;
+    const requestDecisionNotification = vi.fn(async () => {});
+    const { service } = serviceFor(repository, { requestDecisionNotification });
+
+    await expect(
+      service.decideReport({
+        reportId,
+        officerId: officerOne,
+        result: VerificationResult.REJECTED,
+        reason: "Reported location does not show a hazard.",
+      }),
+    ).rejects.toThrow("Database write failed.");
+    expect(repository.currentStatus()).toBe(ReportStatus.PENDING);
+    expect(repository.decisions).toHaveLength(0);
+    expect(requestDecisionNotification).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -257,6 +324,31 @@ describe("HazardVerificationService decision workflow", () => {
       ReportAlreadyProcessedError,
     );
     expect(repository.decisions).toHaveLength(1);
+  });
+
+  it("requests only one reporter notification for concurrent duplicate rejections", async () => {
+    const repository = new InMemoryDecisionRepository();
+    const requestDecisionNotification = vi.fn(async () => {});
+    const { service } = serviceFor(repository, { requestDecisionNotification });
+    const rejection = {
+      reportId,
+      officerId: officerOne,
+      result: VerificationResult.REJECTED,
+      reason: "Reported location does not show a hazard.",
+    };
+
+    const outcomes = await Promise.allSettled([
+      service.decideReport(rejection),
+      service.decideReport(rejection),
+    ]);
+
+    expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome.status === "rejected")[0]?.reason).toBeInstanceOf(
+      ReportAlreadyProcessedError,
+    );
+    expect(repository.currentStatus()).toBe(ReportStatus.REJECTED);
+    expect(repository.decisions).toHaveLength(1);
+    expect(requestDecisionNotification).toHaveBeenCalledOnce();
   });
 
   it("maps a repeated final decision to already processed without creating a duplicate", async () => {

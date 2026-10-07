@@ -14,6 +14,7 @@ import { createHazardSubmissionRouter } from "./modules/hazard-submission/submis
 import { PrismaHazardVerificationRepository } from "./modules/hazard-verification/hazard-verification.repository.js";
 import { HazardVerificationService } from "./modules/hazard-verification/hazard-verification.service.js";
 import { createVerificationRouter } from "./modules/hazard-verification/verification.routes.js";
+import type { ReporterNotificationPort } from "./modules/hazard-verification/types.js";
 import { PrismaHazardBroadcastRepository } from "./modules/hazard-broadcast/alert.repository.js";
 import { HazardBroadcastService } from "./modules/hazard-broadcast/alert.service.js";
 import { createAlertRouter } from "./modules/hazard-broadcast/alert.routes.js";
@@ -24,6 +25,7 @@ export interface AppDependencies {
   readonly resolveDevelopmentAuthUser?: ResolveDevelopmentAuthUser;
   readonly submissionService?: HazardSubmissionService;
   readonly verificationService?: HazardVerificationService;
+  readonly reporterNotificationPort?: ReporterNotificationPort;
   readonly broadcastService?: HazardBroadcastService;
 }
 
@@ -52,7 +54,11 @@ export function createApp(dependencies: AppDependencies = {}) {
   app.use(`${API_BASE_PATH}/hazard-reports`, createHazardSubmissionRouter(submissionService));
   const verificationService =
     dependencies.verificationService ??
-    new HazardVerificationService(new PrismaHazardVerificationRepository(prisma));
+    new HazardVerificationService(
+      new PrismaHazardVerificationRepository(prisma),
+      undefined,
+      dependencies.reporterNotificationPort,
+    );
   const broadcastService =
     dependencies.broadcastService ??
     new HazardBroadcastService(new PrismaHazardBroadcastRepository(prisma));

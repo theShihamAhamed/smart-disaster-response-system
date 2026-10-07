@@ -6,6 +6,7 @@ import type {
   HazardVerificationRepository,
   PendingReport,
   ReportForReview,
+  ReporterNotificationPort,
   VerificationDecisionRecord,
 } from "./types.js";
 import { ReportAlreadyProcessedError, ReportNotFoundError, ValidationError } from "./types.js";
@@ -21,6 +22,7 @@ export class HazardVerificationService {
   public constructor(
     private readonly repository: HazardVerificationRepository,
     private readonly now: () => Date = () => new Date(),
+    private readonly reporterNotificationPort?: ReporterNotificationPort,
   ) {}
 
   public listPendingReports(): Promise<readonly PendingReport[]> {
@@ -45,6 +47,24 @@ export class HazardVerificationService {
     });
 
     if (result.kind === "DECIDED") {
+      if (
+        result.decision.result === VerificationResult.REJECTED &&
+        this.reporterNotificationPort &&
+        typeof result.decision.reason === "string"
+      ) {
+        try {
+          await this.reporterNotificationPort.requestDecisionNotification({
+            reportId: result.decision.reportId,
+            decision: "REJECTED",
+            rejectionReason: result.decision.reason,
+          });
+        } catch (error) {
+          console.error("Reporter notification failed after committed rejection.", {
+            reportId: result.decision.reportId,
+            error,
+          });
+        }
+      }
       return result.decision;
     }
     if (result.kind === "REPORT_NOT_FOUND") {
