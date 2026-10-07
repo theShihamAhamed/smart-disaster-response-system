@@ -5,14 +5,10 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "android": {
       "package": "lk.sliit.disastercoordination"
     },
-    "plugins": [
-      "expo-status-bar"
-    ]
+    "plugins": ["expo-status-bar"]
   }
 }
