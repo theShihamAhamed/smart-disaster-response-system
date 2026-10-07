@@ -1,7 +1,7 @@
 import { ApiClientError } from "@disaster/api-client";
 import { ZoneSeverity } from "@disaster/domain";
 import type { ReliefAllocationCommand, ReliefAllocationReceipt } from "@disaster/shared-types";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
 import {
   createInitialDraft,
@@ -281,6 +281,7 @@ export function ReliefWorkspacePage({
         receipt={receipt}
         recovered={recoveredReceipt}
         goToQueue={goToQueue}
+        headingRef={statusHeading}
         viewUpdatedRequest={reloadLatest}
       />
     );
@@ -424,6 +425,7 @@ export function ReliefWorkspacePage({
         edit={() => setPhase("EDITING")}
         confirm={() => void submitAllocation()}
         goToQueue={goToQueue}
+        headingRef={statusHeading}
       />
     );
   }
@@ -750,6 +752,7 @@ function ConfirmationView({
   edit,
   confirm,
   goToQueue,
+  headingRef,
 }: {
   readonly details: NonNullable<Awaited<ReturnType<ReliefAllocationApi["getReliefRequest"]>>>;
   readonly draft: AllocationDraft;
@@ -758,6 +761,7 @@ function ConfirmationView({
   readonly edit: () => void;
   readonly confirm: () => void;
   readonly goToQueue: () => void;
+  readonly headingRef: RefObject<HTMLHeadingElement | null>;
 }) {
   const partnerName = (partnerId: string) =>
     details.eligiblePartners.find(({ id }) => id === partnerId)?.name ?? "Selected partner";
@@ -769,7 +773,9 @@ function ConfirmationView({
       <section className="review-heading">
         <div>
           <p className="eyebrow">Final review</p>
-          <h1>Confirm relief allocation</h1>
+          <h1 ref={headingRef} tabIndex={-1}>
+            Confirm relief allocation
+          </h1>
           <p className="lede">
             Review the warehouse, partner, and dispatch outcomes before committing.
           </p>
@@ -887,11 +893,13 @@ function ReceiptView({
   receipt,
   recovered,
   goToQueue,
+  headingRef,
   viewUpdatedRequest,
 }: {
   readonly receipt: ReliefAllocationReceipt;
   readonly recovered: boolean;
   readonly goToQueue: () => void;
+  readonly headingRef: RefObject<HTMLHeadingElement | null>;
   readonly viewUpdatedRequest: () => void;
 }) {
   return (
@@ -901,7 +909,9 @@ function ReceiptView({
           ✓
         </span>
         <p className="eyebrow">Allocation committed</p>
-        <h1>Relief allocation finalized</h1>
+        <h1 ref={headingRef} tabIndex={-1}>
+          Relief allocation finalized
+        </h1>
         <p>
           {recovered
             ? "Existing committed allocation recovered."

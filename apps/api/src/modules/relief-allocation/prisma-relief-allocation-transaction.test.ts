@@ -100,10 +100,15 @@ function fakeDatabase(request = requestAggregate()) {
 
 describe("atomic relief allocation transaction", () => {
   it("commits an exact-boundary allocation with one item, log, and derived ALLOCATED status", async () => {
-    const { port, transaction } = fakeDatabase();
+    const { client, port, transaction } = fakeDatabase();
 
     await expect(port.execute(prepared())).resolves.toEqual({ kind: "COMMITTED" });
 
+    expect(client.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: "Serializable",
+      maxWait: 10_000,
+      timeout: 60_000,
+    });
     expect(transaction.warehouseStock.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ availableQty: { gte: 10 } }),

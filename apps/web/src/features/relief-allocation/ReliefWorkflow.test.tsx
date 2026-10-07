@@ -31,7 +31,10 @@ async function prepareConfirmedAllocation(
     target: { value: "  Priority medical delivery.  " },
   });
   fireEvent.click(screen.getByRole("button", { name: "Review allocation" }));
-  await screen.findByRole("heading", { name: "Confirm relief allocation" });
+  const confirmationHeading = await screen.findByRole("heading", {
+    name: "Confirm relief allocation",
+  });
+  await waitFor(() => expect(confirmationHeading).toHaveFocus());
   return { api, createIdempotencyKey };
 }
 
@@ -105,7 +108,10 @@ describe("allocation confirmation and submission", () => {
     await prepareConfirmedAllocation();
     fireEvent.click(screen.getByRole("button", { name: "Confirm allocation" }));
 
-    await screen.findByRole("heading", { name: "Relief allocation finalized" });
+    const receiptHeading = await screen.findByRole("heading", {
+      name: "Relief allocation finalized",
+    });
+    await waitFor(() => expect(receiptHeading).toHaveFocus());
     expect(screen.getByText(receipt.allocationId)).toBeInTheDocument();
     expect(screen.getByText("60 units")).toBeInTheDocument();
     expect(screen.getByText("12 units")).toBeInTheDocument();

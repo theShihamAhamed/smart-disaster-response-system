@@ -304,6 +304,35 @@ describeIntegration("atomic relief allocation against isolated PostgreSQL", () =
     ).toBe(0);
   });
 
+  it("persists a resupply-only command without zero allocation items or stock changes", async () => {
+    const port = new PrismaReliefAllocationTransaction(prisma);
+
+    await expect(port.execute(command(ids.requestC, ids.itemC, ids.keyA, 0))).resolves.toEqual({
+      kind: "COMMITTED",
+    });
+
+    expect(await prisma.resourceAllocation.count({ where: { requestId: ids.requestC } })).toBe(1);
+    expect(await prisma.allocationItem.count({ where: { requestItemId: ids.itemC } })).toBe(0);
+    expect(
+      await prisma.distributionLog.count({ where: { allocation: { requestId: ids.requestC } } }),
+    ).toBe(0);
+    expect(
+      await prisma.partnerResupplyRequest.findMany({ where: { reliefRequestId: ids.requestC } }),
+    ).toEqual([
+      expect.objectContaining({
+        partnerOrganisationId: ids.partner,
+        supplyType: SupplyType.WATER,
+        requestedQty: 10,
+      }),
+    ]);
+    expect(
+      await prisma.reliefRequest.findUniqueOrThrow({ where: { id: ids.requestC } }),
+    ).toMatchObject({ status: ReliefRequestStatus.AWAITING_RESUPPLY, version: 2 });
+    expect(
+      (await prisma.warehouseStock.findUniqueOrThrow({ where: { id: ids.stock } })).availableQty,
+    ).toBe(10);
+  });
+
   it("prevents the same AVAILABLE rescue team from being dispatched twice", async () => {
     const port = new PrismaReliefAllocationTransaction(prisma);
     const results = await Promise.allSettled([

@@ -467,7 +467,11 @@ export class PrismaReliefAllocationTransaction implements ReliefAllocationTransa
 
         return { kind: "COMMITTED" } as const;
       },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        maxWait: 10_000,
+        timeout: 60_000,
+      },
     );
   }
 }
