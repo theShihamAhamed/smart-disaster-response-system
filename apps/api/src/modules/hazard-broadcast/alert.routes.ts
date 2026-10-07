@@ -13,6 +13,9 @@ export function createAlertRouter(service: HazardBroadcastService): Router {
   router.get("/:alertId/preview", controller.getPreview);
   router.get("/:alertId/similar-active", controller.getSimilarActive);
   router.post("/:alertId/broadcast", controller.broadcastAlert);
+  router.get("/:alertId/deliveries", controller.getDeliveries);
+  router.post("/:alertId/deliveries/retry", controller.retryDeliveries);
   router.post("/:alertId/replacement-drafts", controller.createReplacementDraft);
+  router.post("/:alertId/cancel", controller.cancelAlert);
   return router;
 }

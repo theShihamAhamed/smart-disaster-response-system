@@ -461,4 +461,315 @@ describe("PrismaHazardBroadcastRepository", () => {
       data: [{ alertId: expect.any(String), targetZoneId: zone1 }],
     });
   });
+
+  it("cancels an ACTIVE alert atomically in a transaction", async () => {
+    const fixedNow = new Date("2026-10-06T12:00:00.000Z");
+    const activeAlertRow = {
+      ...sampleAlertRow,
+      status: AlertStatus.ACTIVE,
+      issuedAt: new Date("2026-10-06T10:00:00.000Z"),
+      targetZones: [{ targetZoneId: zone1 }],
+    };
+
+    const cancelledAlertRow = {
+      ...activeAlertRow,
+      status: AlertStatus.CANCELLED,
+      cancelledAt: fixedNow,
+      cancellationReason: "Water receded completely.",
+    };
+
+    const txAlertFindUnique = vi.fn().mockResolvedValue(activeAlertRow);
+    const txAlertUpdate = vi.fn().mockResolvedValue(cancelledAlertRow);
+    const txBroadcastAuditCreate = vi.fn().mockResolvedValue({ id: "audit-1" });
+    const txNotificationDeliveryCreate = vi.fn().mockResolvedValue({ id: "deliv-1" });
+
+    const mockPrisma = {
+      $transaction: vi.fn(async (callback) => {
+        return callback({
+          alert: {
+            findUnique: txAlertFindUnique,
+            update: txAlertUpdate,
+          },
+          broadcastAudit: {
+            create: txBroadcastAuditCreate,
+          },
+          notificationDelivery: {
+            create: txNotificationDeliveryCreate,
+          },
+        });
+      }),
+    };
+
+    const repository = new PrismaHazardBroadcastRepository(mockPrisma as any);
+    const result = await repository.cancelAlert({
+      alertId,
+      officerId,
+      reason: "Water receded completely.",
+      cancelledAt: fixedNow,
+      recipientRefs: ["recipient-1"],
+    });
+
+    expect(result.id).toBe(alertId);
+    expect(result.status).toBe(AlertStatus.CANCELLED);
+    expect(result.cancelledAt).toEqual(fixedNow);
+    expect(result.cancellationReason).toBe("Water receded completely.");
+
+    expect(txAlertUpdate).toHaveBeenCalledWith({
+      where: { id: alertId, status: AlertStatus.ACTIVE },
+      data: {
+        status: AlertStatus.CANCELLED,
+        cancelledAt: fixedNow,
+        cancellationReason: "Water receded completely.",
+      },
+      select: expect.any(Object),
+    });
+
+    expect(txBroadcastAuditCreate).toHaveBeenCalledWith({
+      data: {
+        id: expect.any(String),
+        alertId,
+        officerId,
+        action: "CANCELLED",
+        reason: "Water receded completely.",
+        createdAt: fixedNow,
+      },
+    });
+
+    expect(txNotificationDeliveryCreate).toHaveBeenCalledWith({
+      data: {
+        id: expect.any(String),
+        alertId,
+        recipientRef: "recipient-1",
+        status: DeliveryStatus.PENDING,
+        attemptNo: 0,
+        lastFailureReason: null,
+        updatedAt: fixedNow,
+      },
+    });
+  });
+
+  it("finds and maps notification deliveries by alertId", async () => {
+    const deliveryRow = {
+      id: "deliv-1",
+      alertId,
+      recipientRef: "citizen-1",
+      status: DeliveryStatus.PENDING,
+      attemptNo: 0,
+      lastFailureReason: null,
+      updatedAt: new Date("2026-10-06T10:00:00.000Z"),
+    };
+
+    const mockPrisma = {
+      notificationDelivery: {
+        findMany: vi.fn().mockResolvedValue([deliveryRow]),
+      },
+    };
+
+    const repository = new PrismaHazardBroadcastRepository(mockPrisma as any);
+    const results = await repository.findDeliveriesByAlertId(alertId);
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toEqual(deliveryRow);
+    expect(mockPrisma.notificationDelivery.findMany).toHaveBeenCalledWith({
+      where: { alertId },
+      orderBy: { updatedAt: "asc" },
+    });
+  });
+
+  it("finds a single notification delivery by delivery ID", async () => {
+    const deliveryRow = {
+      id: "deliv-1",
+      alertId,
+      recipientRef: "citizen-1",
+      status: DeliveryStatus.PENDING,
+      attemptNo: 0,
+      lastFailureReason: null,
+      updatedAt: new Date("2026-10-06T10:00:00.000Z"),
+    };
+
+    const mockPrisma = {
+      notificationDelivery: {
+        findUnique: vi.fn().mockResolvedValue(deliveryRow),
+      },
+    };
+
+    const repository = new PrismaHazardBroadcastRepository(mockPrisma as any);
+    const result = await repository.findDeliveryById("deliv-1");
+
+    expect(result).toEqual(deliveryRow);
+    expect(mockPrisma.notificationDelivery.findUnique).toHaveBeenCalledWith({
+      where: { id: "deliv-1" },
+    });
+  });
+
+  it("returns null if delivery ID is not found", async () => {
+    const mockPrisma = {
+      notificationDelivery: {
+        findUnique: vi.fn().mockResolvedValue(null),
+      },
+    };
+
+    const repository = new PrismaHazardBroadcastRepository(mockPrisma as any);
+    const result = await repository.findDeliveryById("nonexistent-id");
+
+    expect(result).toBeNull();
+  });
+
+  it("updates notification delivery status and attempt number", async () => {
+    const updatedRow = {
+      id: "deliv-1",
+      alertId,
+      recipientRef: "citizen-1",
+      status: DeliveryStatus.PUSH_SENT,
+      attemptNo: 1,
+      lastFailureReason: null,
+      updatedAt: new Date("2026-10-06T10:05:00.000Z"),
+    };
+
+    const mockPrisma = {
+      notificationDelivery: {
+        update: vi.fn().mockResolvedValue(updatedRow),
+      },
+    };
+
+    const repository = new PrismaHazardBroadcastRepository(mockPrisma as any);
+    const result = await repository.updateDelivery({
+      deliveryId: "deliv-1",
+      status: DeliveryStatus.PUSH_SENT,
+      attemptNo: 1,
+      lastFailureReason: null,
+      updatedAt: new Date("2026-10-06T10:05:00.000Z"),
+    });
+
+    expect(result).toEqual(updatedRow);
+    expect(mockPrisma.notificationDelivery.update).toHaveBeenCalledWith({
+      where: { id: "deliv-1" },
+      data: {
+        status: DeliveryStatus.PUSH_SENT,
+        attemptNo: 1,
+        lastFailureReason: null,
+        updatedAt: new Date("2026-10-06T10:05:00.000Z"),
+      },
+    });
+  });
+
+  it("creates a replacement draft with incremented version and parentAlertId", async () => {
+    const replacementRow = {
+      ...sampleAlertRow,
+      id: "50000000-0000-4000-8000-000000000002",
+      parentAlertId: alertId,
+      version: 2,
+      status: AlertStatus.DRAFT,
+      targetZones: [{ targetZoneId: zone1 }],
+    };
+
+    const mockPrisma = {
+      $transaction: vi.fn().mockImplementation(async (callback) => {
+        const tx = {
+          alert: {
+            create: vi.fn().mockResolvedValue(replacementRow),
+            findUniqueOrThrow: vi.fn().mockResolvedValue(replacementRow),
+          },
+          alertTargetZone: {
+            createMany: vi.fn().mockResolvedValue({ count: 1 }),
+          },
+        };
+        return callback(tx);
+      }),
+    };
+
+    const repository = new PrismaHazardBroadcastRepository(mockPrisma as any);
+    const result = await repository.createReplacementDraft({
+      parentAlertId: alertId,
+      sourceReportId: reportId,
+      createdByOfficerId: officerId,
+      hazardType: HazardType.FLOOD,
+      severity: AlertSeverity.WARNING,
+      message: "Updated flood alert",
+      safetyInstructions: "Move to higher ground",
+      status: AlertStatus.DRAFT,
+      version: 2,
+      targetZoneIds: [zone1],
+    });
+
+    expect(result.id).toBe("50000000-0000-4000-8000-000000000002");
+    expect(result.parentAlertId).toBe(alertId);
+    expect(result.version).toBe(2);
+    expect(result.status).toBe(AlertStatus.DRAFT);
+  });
+
+  it("activates replacement alert and atomically supersedes parent alert", async () => {
+    const parentRow = {
+      ...sampleAlertRow,
+      id: alertId,
+      status: AlertStatus.ACTIVE,
+    };
+
+    const replacementRow = {
+      ...sampleAlertRow,
+      id: "50000000-0000-4000-8000-000000000002",
+      parentAlertId: alertId,
+      version: 2,
+      status: AlertStatus.DRAFT,
+    };
+
+    const activatedReplacementRow = {
+      ...replacementRow,
+      status: AlertStatus.ACTIVE,
+      issuedAt: new Date("2026-10-06T11:00:00.000Z"),
+    };
+
+    const mockParentUpdate = vi
+      .fn()
+      .mockResolvedValue({ ...parentRow, status: AlertStatus.SUPERSEDED });
+    const mockReplacementUpdate = vi.fn().mockResolvedValue(activatedReplacementRow);
+    const mockAuditCreate = vi.fn().mockResolvedValue({ id: "audit-1" });
+
+    const mockPrisma = {
+      $transaction: vi.fn().mockImplementation(async (callback) => {
+        const tx = {
+          alert: {
+            findUnique: vi.fn().mockImplementation(({ where }) => {
+              if (where.id === "50000000-0000-4000-8000-000000000002")
+                return Promise.resolve(replacementRow);
+              if (where.id === alertId) return Promise.resolve(parentRow);
+              return Promise.resolve(null);
+            }),
+            update: vi.fn().mockImplementation(({ where }) => {
+              if (where.id === alertId) return mockParentUpdate();
+              if (where.id === "50000000-0000-4000-8000-000000000002")
+                return mockReplacementUpdate();
+              return Promise.resolve(null);
+            }),
+          },
+          broadcastAudit: {
+            create: mockAuditCreate,
+          },
+          notificationDelivery: {
+            create: vi.fn(),
+          },
+        };
+        return callback(tx);
+      }),
+    };
+
+    const repository = new PrismaHazardBroadcastRepository(mockPrisma as any);
+    const result = await repository.activateAlert({
+      alertId: "50000000-0000-4000-8000-000000000002",
+      officerId,
+      issuedAt: new Date("2026-10-06T11:00:00.000Z"),
+    });
+
+    expect(result.alert.status).toBe(AlertStatus.ACTIVE);
+    expect(result.alert.id).toBe("50000000-0000-4000-8000-000000000002");
+    expect(mockParentUpdate).toHaveBeenCalled();
+    expect(mockAuditCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          alertId,
+          action: "SUPERSEDED",
+        }),
+      }),
+    );
+  });
 });

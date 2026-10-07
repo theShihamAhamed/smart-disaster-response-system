@@ -9,6 +9,7 @@ import {
   AlertNotActiveError,
   AlertNotFoundError,
   AlertNotInDraftError,
+  DeliveryNotFoundError,
   ReportNotFoundError,
   ReportNotVerifiedError,
   SimilarAlertActiveError,
@@ -18,25 +19,36 @@ import {
 const reportIdParamsSchema = z.object({ reportId: uuidSchema });
 const alertIdParamsSchema = z.object({ alertId: uuidSchema });
 
-const updateDraftBodySchema = z
+const updateDraftBodySchema = z.object({
+  severity: alertSeveritySchema,
+  message: z
+    .string()
+    .trim()
+    .min(1, "Alert message cannot be blank.")
+    .max(1000, "Alert message cannot exceed 1000 characters."),
+  safetyInstructions: z
+    .string()
+    .trim()
+    .min(1, "Safety instructions cannot be blank.")
+    .max(1000, "Safety instructions cannot exceed 1000 characters."),
+  targetZoneIds: z.array(uuidSchema).min(1, "At least one target zone must be selected."),
+});
+const cancelAlertBodySchema = z
   .object({
-    severity: alertSeveritySchema,
-    message: z
-      .string()
+    reason: z
+      .string({ required_error: "Cancellation reason is required." })
       .trim()
-      .min(1, "Alert message cannot be blank.")
-      .max(1000, "Alert message cannot exceed 1000 characters."),
-    safetyInstructions: z
-      .string()
-      .trim()
-      .min(1, "Safety instructions cannot be blank.")
-      .max(1000, "Safety instructions cannot exceed 1000 characters."),
-    targetZoneIds: z.array(uuidSchema).min(1, "At least one target zone must be selected."),
+      .min(10, "Cancellation reason must be at least 10 characters.")
+      .max(500, "Cancellation reason cannot exceed 500 characters."),
   })
   .strict();
 
 function mapFeatureError(error: unknown): Error {
-  if (error instanceof ReportNotFoundError || error instanceof AlertNotFoundError) {
+  if (
+    error instanceof ReportNotFoundError ||
+    error instanceof AlertNotFoundError ||
+    error instanceof DeliveryNotFoundError
+  ) {
     return new HttpError(404, "NOT_FOUND", "The requested resource was not found.");
   }
   if (error instanceof ReportNotVerifiedError) {
@@ -58,13 +70,7 @@ function mapFeatureError(error: unknown): Error {
     );
   }
   if (error instanceof AlertNotActiveError) {
-    return new HttpError(
-      409,
-      "ALERT_NOT_ACTIVE",
-      "A replacement draft can only be created from an ACTIVE alert.",
-      {},
-      { status: error.status },
-    );
+    return new HttpError(409, "ALERT_NOT_ACTIVE", error.message, {}, { status: error.status });
   }
   if (error instanceof AlertNotInDraftError) {
     return new HttpError(
@@ -208,6 +214,66 @@ export class AlertController {
       });
 
       response.status(201).json(replacement);
+    } catch (error) {
+      next(mapFeatureError(error));
+    }
+  };
+
+  public readonly cancelAlert: RequestHandler = async (request, response, next) => {
+    try {
+      const auth = response.locals.auth;
+      if (!auth || auth.role !== UserRole.DMC_DUTY_OFFICER || !auth.canBroadcast) {
+        throw new HttpError(
+          403,
+          "FORBIDDEN",
+          "The current officer does not have permission to broadcast alerts.",
+        );
+      }
+
+      const alertId = parseAlertIdParam(request.params);
+      const idempotencyKey = request.header("Idempotency-Key");
+      if (idempotencyKey) {
+        uuidSchema.parse(idempotencyKey);
+      }
+
+      const body = cancelAlertBodySchema.parse(request.body);
+
+      const result = await this.service.cancelAlert({
+        alertId,
+        officerId: auth.userId,
+        reason: body.reason,
+      });
+
+      response.status(200).json(result);
+    } catch (error) {
+      next(mapFeatureError(error));
+    }
+  };
+
+  public readonly getDeliveries: RequestHandler = async (request, response, next) => {
+    try {
+      const alertId = parseAlertIdParam(request.params);
+      const tracking = await this.service.getDeliveryTracking(alertId);
+      response.status(200).json(tracking);
+    } catch (error) {
+      next(mapFeatureError(error));
+    }
+  };
+
+  public readonly retryDeliveries: RequestHandler = async (request, response, next) => {
+    try {
+      const auth = response.locals.auth;
+      if (!auth || auth.role !== UserRole.DMC_DUTY_OFFICER || !auth.canBroadcast) {
+        throw new HttpError(
+          403,
+          "FORBIDDEN",
+          "The current officer does not have permission to broadcast alerts.",
+        );
+      }
+
+      const alertId = parseAlertIdParam(request.params);
+      const results = await this.service.retryEligibleDeliveries(alertId);
+      response.status(200).json({ alertId, results });
     } catch (error) {
       next(mapFeatureError(error));
     }

@@ -6,6 +6,7 @@ import type {
   AlertPreviewData,
   AlertRecord,
   BroadcastAlertResult,
+  CancelAlertCommand,
   CreateAlertPersistenceResult,
   CreateInitialAlertCommand,
   CreateReplacementDraftCommand,
@@ -14,9 +15,15 @@ import type {
   NotificationDeliveryRecord,
   SourceReport,
   TargetZoneSummary,
+  UpdateDeliveryCommand,
   UpdateDraftAlertCommand,
 } from "./types.js";
-import { AlertAlreadyActiveError, AlertNotFoundError, AlertNotInDraftError } from "./types.js";
+import {
+  AlertAlreadyActiveError,
+  AlertNotActiveError,
+  AlertNotFoundError,
+  AlertNotInDraftError,
+} from "./types.js";
 
 const sourceReportSelect = {
   id: true,
@@ -153,11 +160,18 @@ export class PrismaHazardBroadcastRepository implements HazardBroadcastRepositor
       return [];
     }
 
+    let idCondition: Prisma.AlertWhereInput["id"] | undefined;
+    if (query.excludeAlertIds && query.excludeAlertIds.length > 0) {
+      idCondition = { notIn: Array.from(query.excludeAlertIds) };
+    } else if (query.excludeAlertId) {
+      idCondition = { not: query.excludeAlertId };
+    }
+
     const alerts = await this.prisma.alert.findMany({
       where: {
         status: AlertStatus.ACTIVE,
         hazardType: query.hazardType,
-        ...(query.excludeAlertId ? { id: { not: query.excludeAlertId } } : {}),
+        ...(idCondition ? { id: idCondition } : {}),
         targetZones: {
           some: {
             targetZoneId: {
@@ -264,6 +278,46 @@ export class PrismaHazardBroadcastRepository implements HazardBroadcastRepositor
         throw new AlertNotInDraftError(current.status);
       }
 
+      if (current.parentAlertId) {
+        const parent = await tx.alert.findUnique({
+          where: { id: current.parentAlertId },
+          select: alertSelect,
+        });
+
+        if (!parent) {
+          throw new AlertNotFoundError(current.parentAlertId);
+        }
+
+        if (parent.status !== AlertStatus.ACTIVE) {
+          throw new AlertNotActiveError(
+            parent.status,
+            `Cannot activate replacement alert because parent alert is ${parent.status}. Parent must be ACTIVE.`,
+          );
+        }
+
+        await tx.alert.update({
+          where: {
+            id: current.parentAlertId,
+            status: AlertStatus.ACTIVE,
+          },
+          data: {
+            status: AlertStatus.SUPERSEDED,
+          },
+        });
+
+        await tx.broadcastAudit.create({
+          data: {
+            id: randomUUID(),
+            alertId: current.parentAlertId,
+            officerId: command.officerId,
+            action: "SUPERSEDED",
+            reason:
+              command.reason ?? `Superseded by alert version ${current.version} (${current.id})`,
+            createdAt: command.issuedAt,
+          },
+        });
+      }
+
       const updated = await tx.alert.update({
         where: {
           id: command.alertId,
@@ -360,5 +414,121 @@ export class PrismaHazardBroadcastRepository implements HazardBroadcastRepositor
 
       return mapAlertRecord(result);
     });
+  }
+
+  public async cancelAlert(command: CancelAlertCommand): Promise<AlertRecord> {
+    return this.prisma.$transaction(async (tx) => {
+      const current = await tx.alert.findUnique({
+        where: { id: command.alertId },
+        select: alertSelect,
+      });
+
+      if (!current) {
+        throw new AlertNotFoundError(command.alertId);
+      }
+
+      if (current.status !== AlertStatus.ACTIVE) {
+        throw new AlertNotActiveError(current.status);
+      }
+
+      const updated = await tx.alert.update({
+        where: {
+          id: command.alertId,
+          status: AlertStatus.ACTIVE,
+        },
+        data: {
+          status: AlertStatus.CANCELLED,
+          cancelledAt: command.cancelledAt,
+          cancellationReason: command.reason,
+        },
+        select: alertSelect,
+      });
+
+      await tx.broadcastAudit.create({
+        data: {
+          id: randomUUID(),
+          alertId: command.alertId,
+          officerId: command.officerId,
+          action: "CANCELLED",
+          reason: command.reason,
+          createdAt: command.cancelledAt,
+        },
+      });
+
+      if (command.recipientRefs && command.recipientRefs.length > 0) {
+        for (const recipientRef of command.recipientRefs) {
+          await tx.notificationDelivery.create({
+            data: {
+              id: randomUUID(),
+              alertId: command.alertId,
+              recipientRef,
+              status: DeliveryStatus.PENDING,
+              attemptNo: 0,
+              lastFailureReason: null,
+              updatedAt: command.cancelledAt,
+            },
+          });
+        }
+      }
+
+      return mapAlertRecord(updated);
+    });
+  }
+
+  public async findDeliveryById(deliveryId: string): Promise<NotificationDeliveryRecord | null> {
+    const delivery = await this.prisma.notificationDelivery.findUnique({
+      where: { id: deliveryId },
+    });
+
+    if (!delivery) return null;
+
+    return {
+      id: delivery.id,
+      alertId: delivery.alertId,
+      recipientRef: delivery.recipientRef,
+      status: delivery.status,
+      attemptNo: delivery.attemptNo,
+      lastFailureReason: delivery.lastFailureReason,
+      updatedAt: delivery.updatedAt,
+    };
+  }
+
+  public async findDeliveriesByAlertId(alertId: string): Promise<NotificationDeliveryRecord[]> {
+    const deliveries = await this.prisma.notificationDelivery.findMany({
+      where: { alertId },
+      orderBy: { updatedAt: "asc" },
+    });
+
+    return deliveries.map((d) => ({
+      id: d.id,
+      alertId: d.alertId,
+      recipientRef: d.recipientRef,
+      status: d.status,
+      attemptNo: d.attemptNo,
+      lastFailureReason: d.lastFailureReason,
+      updatedAt: d.updatedAt,
+    }));
+  }
+
+  public async updateDelivery(command: UpdateDeliveryCommand): Promise<NotificationDeliveryRecord> {
+    const updated = await this.prisma.notificationDelivery.update({
+      where: { id: command.deliveryId },
+      data: {
+        status: command.status,
+        attemptNo: command.attemptNo,
+        lastFailureReason: command.lastFailureReason,
+        updatedAt: command.updatedAt,
+      },
+    });
+
+    return {
+      id: updated.id,
+      alertId: updated.alertId,
+      recipientRef: updated.recipientRef,
+      status: updated.status,
+      attemptNo: updated.attemptNo,
+      lastFailureReason: updated.lastFailureReason,
+      updatedAt: updated.updatedAt,
+    };
   }
 }

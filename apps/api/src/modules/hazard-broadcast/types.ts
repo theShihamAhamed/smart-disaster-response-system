@@ -48,6 +48,58 @@ export interface NotificationDeliveryRecord {
   readonly updatedAt: Date;
 }
 
+export interface NotificationPayload {
+  readonly alertId: string;
+  readonly hazardType: HazardType;
+  readonly severity: AlertSeverity;
+  readonly message: string;
+  readonly safetyInstructions: string;
+}
+
+export interface GatewayResult {
+  readonly success: boolean;
+  readonly error?: string | undefined;
+}
+
+export interface PushGateway {
+  sendPush(recipientRef: string, payload: NotificationPayload): Promise<GatewayResult>;
+}
+
+export interface SmsGateway {
+  sendSms(recipientRef: string, payload: NotificationPayload): Promise<GatewayResult>;
+}
+
+export interface UpdateDeliveryCommand {
+  readonly deliveryId: string;
+  readonly status: DeliveryStatus;
+  readonly attemptNo: number;
+  readonly lastFailureReason: string | null;
+  readonly updatedAt: Date;
+}
+
+export interface DeliveryTrackingSummary {
+  readonly alertId: string;
+  readonly total: number;
+  readonly pending: number;
+  readonly pushSent: number;
+  readonly pushFailed: number;
+  readonly smsFallbackQueued: number;
+  readonly smsSent: number;
+  readonly failedFinal: number;
+  readonly deliveries: readonly NotificationDeliveryRecord[];
+}
+
+export interface RetryPolicyOptions {
+  readonly minRetryIntervalMs?: number | undefined;
+  readonly maxAttempts?: number | undefined;
+}
+
+export interface RetryResult {
+  readonly attempted: boolean;
+  readonly skippedReason?: string | undefined;
+  readonly delivery: NotificationDeliveryRecord;
+}
+
 export interface BroadcastAlertResult {
   readonly alert: AlertRecord;
   readonly deliveries: readonly NotificationDeliveryRecord[];
@@ -124,6 +176,7 @@ export interface FindSimilarActiveAlertsQuery {
   readonly hazardType: HazardType;
   readonly targetZoneIds: readonly string[];
   readonly excludeAlertId?: string;
+  readonly excludeAlertIds?: readonly string[];
 }
 
 export interface CreateReplacementDraftInput {
@@ -144,16 +197,43 @@ export interface CreateReplacementDraftCommand {
   readonly targetZoneIds: readonly string[];
 }
 
+export interface CancelAlertInput {
+  readonly alertId: string;
+  readonly officerId: string;
+  readonly reason: string;
+}
+
+export interface CancelAlertCommand {
+  readonly alertId: string;
+  readonly officerId: string;
+  readonly reason: string;
+  readonly cancelledAt: Date;
+  readonly recipientRefs?: readonly string[] | undefined;
+}
+
 export interface HazardBroadcastRepository {
   findSourceReport(reportId: string): Promise<SourceReport | null>;
   findAlertById(alertId: string): Promise<AlertRecord | null>;
   findInitialAlertForReport(reportId: string): Promise<AlertRecord | null>;
   findAlertPreview(alertId: string): Promise<AlertPreviewData | null>;
   findSimilarActiveAlerts(query: FindSimilarActiveAlertsQuery): Promise<AlertRecord[]>;
+  findDeliveryById(deliveryId: string): Promise<NotificationDeliveryRecord | null>;
+  findDeliveriesByAlertId(alertId: string): Promise<NotificationDeliveryRecord[]>;
   createInitialAlert(command: CreateInitialAlertCommand): Promise<CreateAlertPersistenceResult>;
   updateDraftAlert(command: UpdateDraftAlertCommand): Promise<AlertRecord>;
   activateAlert(command: ActivateAlertCommand): Promise<BroadcastAlertResult>;
   createReplacementDraft(command: CreateReplacementDraftCommand): Promise<AlertRecord>;
+  cancelAlert(command: CancelAlertCommand): Promise<AlertRecord>;
+  updateDelivery(command: UpdateDeliveryCommand): Promise<NotificationDeliveryRecord>;
+}
+
+export class DeliveryNotFoundError extends Error {
+  public readonly code = "NOT_FOUND";
+
+  public constructor(deliveryId: string) {
+    super(`Notification delivery ${deliveryId} was not found.`);
+    this.name = "DeliveryNotFoundError";
+  }
 }
 
 export class ReportNotFoundError extends Error {
@@ -204,9 +284,12 @@ export class AlertAlreadyActiveError extends Error {
 export class AlertNotActiveError extends Error {
   public readonly code = "ALERT_NOT_ACTIVE";
 
-  public constructor(public readonly status: AlertStatus) {
+  public constructor(
+    public readonly status: AlertStatus,
+    message?: string,
+  ) {
     super(
-      `Cannot create replacement draft from alert with status ${status}. Parent alert must be ACTIVE.`,
+      message ?? `Cannot perform operation on alert with status ${status}. Alert must be ACTIVE.`,
     );
     this.name = "AlertNotActiveError";
   }

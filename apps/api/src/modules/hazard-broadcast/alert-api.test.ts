@@ -17,6 +17,7 @@ import type {
   AlertPreviewData,
   AlertRecord,
   BroadcastAlertResult,
+  CancelAlertCommand,
   CreateAlertPersistenceResult,
   CreateInitialAlertCommand,
   CreateReplacementDraftCommand,
@@ -25,9 +26,15 @@ import type {
   NotificationDeliveryRecord,
   SourceReport,
   TargetZoneSummary,
+  UpdateDeliveryCommand,
   UpdateDraftAlertCommand,
 } from "./types.js";
-import { AlertAlreadyActiveError, AlertNotFoundError, AlertNotInDraftError } from "./types.js";
+import {
+  AlertAlreadyActiveError,
+  AlertNotActiveError,
+  AlertNotFoundError,
+  AlertNotInDraftError,
+} from "./types.js";
 
 const officerId = "10000000-0000-4000-8000-000000000004";
 const dutyOfficerWithoutBroadcast = "10000000-0000-4000-8000-000000000003";
@@ -171,9 +178,11 @@ class FakeBroadcastApiRepository implements HazardBroadcastRepository {
     if (query.targetZoneIds.length === 0) {
       return [];
     }
+    const excludeIds =
+      query.excludeAlertIds ?? (query.excludeAlertId ? [query.excludeAlertId] : []);
     const results: AlertRecord[] = [];
     for (const alert of this.alerts.values()) {
-      if (query.excludeAlertId && alert.id === query.excludeAlertId) {
+      if (excludeIds.includes(alert.id)) {
         continue;
       }
       if (alert.status !== AlertStatus.ACTIVE) {
@@ -212,6 +221,31 @@ class FakeBroadcastApiRepository implements HazardBroadcastRepository {
     }
     if (current.status !== AlertStatus.DRAFT) {
       throw new AlertNotInDraftError(current.status);
+    }
+
+    if (current.parentAlertId) {
+      const parent = this.alerts.get(current.parentAlertId);
+      if (!parent) {
+        throw new AlertNotFoundError(current.parentAlertId);
+      }
+      if (parent.status !== AlertStatus.ACTIVE) {
+        throw new AlertNotActiveError(
+          parent.status,
+          `Cannot activate replacement alert because parent alert is ${parent.status}. Parent must be ACTIVE.`,
+        );
+      }
+      const supersededParent: AlertRecord = {
+        ...parent,
+        status: AlertStatus.SUPERSEDED,
+      };
+      this.alerts.set(current.parentAlertId, supersededParent);
+      this.broadcastAudits.push({
+        alertId: current.parentAlertId,
+        officerId: command.officerId,
+        action: "SUPERSEDED",
+        reason: command.reason ?? `Superseded by alert version ${current.version} (${current.id})`,
+        createdAt: command.issuedAt,
+      });
     }
 
     const updated: AlertRecord = {
@@ -279,6 +313,75 @@ class FakeBroadcastApiRepository implements HazardBroadcastRepository {
     const matchedZones = targetZonesData.filter((z) => command.targetZoneIds.includes(z.id));
     this.alertTargetZones.set(newAlertId, matchedZones);
     return replacement;
+  }
+
+  public async cancelAlert(command: CancelAlertCommand): Promise<AlertRecord> {
+    const current = this.alerts.get(command.alertId);
+    if (!current) {
+      throw new AlertNotFoundError(command.alertId);
+    }
+    if (current.status !== AlertStatus.ACTIVE) {
+      throw new AlertNotActiveError(current.status);
+    }
+
+    const updated: AlertRecord = {
+      ...current,
+      status: AlertStatus.CANCELLED,
+      cancelledAt: command.cancelledAt,
+      cancellationReason: command.reason,
+    };
+    this.alerts.set(command.alertId, updated);
+
+    this.broadcastAudits.push({
+      alertId: command.alertId,
+      officerId: command.officerId,
+      action: "CANCELLED",
+      reason: command.reason,
+      createdAt: command.cancelledAt,
+    });
+
+    if (command.recipientRefs && command.recipientRefs.length > 0) {
+      for (const recipientRef of command.recipientRefs) {
+        const delivery: NotificationDeliveryRecord = {
+          id: `deliv-${this.notificationDeliveries.length + 1}`,
+          alertId: command.alertId,
+          recipientRef,
+          status: DeliveryStatus.PENDING,
+          attemptNo: 0,
+          lastFailureReason: null,
+          updatedAt: command.cancelledAt,
+        };
+        this.notificationDeliveries.push(delivery);
+      }
+    }
+
+    return updated;
+  }
+
+  public async findDeliveryById(deliveryId: string): Promise<NotificationDeliveryRecord | null> {
+    const delivery = this.notificationDeliveries.find((d) => d.id === deliveryId);
+    return delivery ?? null;
+  }
+
+  public async findDeliveriesByAlertId(alertId: string): Promise<NotificationDeliveryRecord[]> {
+    return this.notificationDeliveries.filter((d) => d.alertId === alertId);
+  }
+
+  public async updateDelivery(command: UpdateDeliveryCommand): Promise<NotificationDeliveryRecord> {
+    const index = this.notificationDeliveries.findIndex((d) => d.id === command.deliveryId);
+    if (index === -1) {
+      throw new Error(`Delivery ${command.deliveryId} not found`);
+    }
+    const current = this.notificationDeliveries[index];
+    const updated: NotificationDeliveryRecord = {
+      ...current,
+      status: command.status,
+      attemptNo: command.attemptNo,
+      lastFailureReason: command.lastFailureReason,
+      updatedAt: command.updatedAt,
+    };
+    this.notificationDeliveries[index] = updated;
+    return updated;
   }
 }
 
@@ -1240,5 +1343,287 @@ describe("POST /api/v1/alerts/:alertId/replacement-drafts", () => {
 
     expect(response.status).toBe(409);
     expect(response.body.error.code).toBe("ALERT_NOT_ACTIVE");
+  });
+});
+
+describe("POST /api/v1/alerts/:alertId/cancel", () => {
+  const cancelReason = "Flood water level has completely normalized.";
+
+  it("successfully cancels an ACTIVE alert and returns 200 with updated alert record", async () => {
+    const { app, repository } = createBroadcastApp();
+    await request(app)
+      .post(`/api/v1/alerts/from-report/${reportId}`)
+      .set("X-Dev-User-Id", officerId);
+
+    await request(app)
+      .patch(`/api/v1/alerts/${alertId}`)
+      .set("X-Dev-User-Id", officerId)
+      .send({
+        severity: AlertSeverity.WARNING,
+        message: "Flood warning in effect.",
+        safetyInstructions: "Evacuate low lying areas.",
+        targetZoneIds: [zone1],
+      });
+
+    await request(app).post(`/api/v1/alerts/${alertId}/broadcast`).set("X-Dev-User-Id", officerId);
+
+    const response = await request(app)
+      .post(`/api/v1/alerts/${alertId}/cancel`)
+      .set("X-Dev-User-Id", officerId)
+      .send({ reason: cancelReason });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      id: alertId,
+      status: AlertStatus.CANCELLED,
+      cancellationReason: cancelReason,
+    });
+    expect(response.body.cancelledAt).toBeTruthy();
+
+    expect(repository.broadcastAudits).toHaveLength(2);
+    expect(repository.broadcastAudits[1]).toMatchObject({
+      alertId,
+      officerId,
+      action: "CANCELLED",
+      reason: cancelReason,
+    });
+  });
+
+  it("trims whitespace from cancellation reason", async () => {
+    const { app } = createBroadcastApp();
+    await request(app)
+      .post(`/api/v1/alerts/from-report/${reportId}`)
+      .set("X-Dev-User-Id", officerId);
+    await request(app)
+      .patch(`/api/v1/alerts/${alertId}`)
+      .set("X-Dev-User-Id", officerId)
+      .send({
+        severity: AlertSeverity.WARNING,
+        message: "Flood warning.",
+        safetyInstructions: "Evacuate.",
+        targetZoneIds: [zone1],
+      });
+    await request(app).post(`/api/v1/alerts/${alertId}/broadcast`).set("X-Dev-User-Id", officerId);
+
+    const response = await request(app)
+      .post(`/api/v1/alerts/${alertId}/cancel`)
+      .set("X-Dev-User-Id", officerId)
+      .send({ reason: `   ${cancelReason}   ` });
+
+    expect(response.status).toBe(200);
+    expect(response.body.cancellationReason).toBe(cancelReason);
+  });
+
+  it("accepts an optional Idempotency-Key header", async () => {
+    const { app } = createBroadcastApp();
+    await request(app)
+      .post(`/api/v1/alerts/from-report/${reportId}`)
+      .set("X-Dev-User-Id", officerId);
+    await request(app)
+      .patch(`/api/v1/alerts/${alertId}`)
+      .set("X-Dev-User-Id", officerId)
+      .send({
+        severity: AlertSeverity.WARNING,
+        message: "Flood warning.",
+        safetyInstructions: "Evacuate.",
+        targetZoneIds: [zone1],
+      });
+    await request(app).post(`/api/v1/alerts/${alertId}/broadcast`).set("X-Dev-User-Id", officerId);
+
+    const response = await request(app)
+      .post(`/api/v1/alerts/${alertId}/cancel`)
+      .set("X-Dev-User-Id", officerId)
+      .set("Idempotency-Key", "70000000-0000-4000-8000-000000000001")
+      .send({ reason: cancelReason });
+
+    expect(response.status).toBe(200);
+  });
+
+  it("rejects non-DMC_DUTY_OFFICER roles with 403 FORBIDDEN", async () => {
+    const { app } = createBroadcastApp();
+    const response = await request(app)
+      .post(`/api/v1/alerts/${alertId}/cancel`)
+      .set("X-Dev-User-Id", citizenId)
+      .send({ reason: cancelReason });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe("FORBIDDEN");
+  });
+
+  it("rejects DMC Duty Officer without broadcast permission with 403 FORBIDDEN", async () => {
+    const { app } = createBroadcastApp();
+    const response = await request(app)
+      .post(`/api/v1/alerts/${alertId}/cancel`)
+      .set("X-Dev-User-Id", dutyOfficerWithoutBroadcast)
+      .send({ reason: cancelReason });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe("FORBIDDEN");
+  });
+
+  it("returns 401 UNAUTHENTICATED when no authenticated user is present", async () => {
+    const { app } = createBroadcastApp();
+    const response = await request(app)
+      .post(`/api/v1/alerts/${alertId}/cancel`)
+      .send({ reason: cancelReason });
+
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe("UNAUTHENTICATED");
+  });
+
+  it("returns 404 NOT_FOUND for invalid UUID format", async () => {
+    const { app } = createBroadcastApp();
+    const response = await request(app)
+      .post("/api/v1/alerts/invalid-uuid/cancel")
+      .set("X-Dev-User-Id", officerId)
+      .send({ reason: cancelReason });
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
+  });
+
+  it("returns 404 NOT_FOUND when alert does not exist", async () => {
+    const { app } = createBroadcastApp();
+    const response = await request(app)
+      .post(`/api/v1/alerts/${unknownId}/cancel`)
+      .set("X-Dev-User-Id", officerId)
+      .send({ reason: cancelReason });
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("NOT_FOUND");
+  });
+
+  it("returns 409 ALERT_NOT_ACTIVE when cancelling a DRAFT alert", async () => {
+    const { app } = createBroadcastApp();
+    await request(app)
+      .post(`/api/v1/alerts/from-report/${reportId}`)
+      .set("X-Dev-User-Id", officerId);
+
+    const response = await request(app)
+      .post(`/api/v1/alerts/${alertId}/cancel`)
+      .set("X-Dev-User-Id", officerId)
+      .send({ reason: cancelReason });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.code).toBe("ALERT_NOT_ACTIVE");
+  });
+
+  it("returns 409 ALERT_NOT_ACTIVE when cancelling a SUPERSEDED alert", async () => {
+    const { app, repository } = createBroadcastApp();
+    await request(app)
+      .post(`/api/v1/alerts/from-report/${reportId}`)
+      .set("X-Dev-User-Id", officerId);
+
+    const draft = await repository.findAlertById(alertId);
+    repository.alerts.set(alertId, {
+      ...draft!,
+      status: AlertStatus.SUPERSEDED,
+    });
+
+    const response = await request(app)
+      .post(`/api/v1/alerts/${alertId}/cancel`)
+      .set("X-Dev-User-Id", officerId)
+      .send({ reason: cancelReason });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.code).toBe("ALERT_NOT_ACTIVE");
+  });
+
+  it("returns 409 ALERT_NOT_ACTIVE when cancelling an already CANCELLED alert", async () => {
+    const { app, repository } = createBroadcastApp();
+    await request(app)
+      .post(`/api/v1/alerts/from-report/${reportId}`)
+      .set("X-Dev-User-Id", officerId);
+
+    const draft = await repository.findAlertById(alertId);
+    repository.alerts.set(alertId, {
+      ...draft!,
+      status: AlertStatus.CANCELLED,
+    });
+
+    const response = await request(app)
+      .post(`/api/v1/alerts/${alertId}/cancel`)
+      .set("X-Dev-User-Id", officerId)
+      .send({ reason: cancelReason });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.code).toBe("ALERT_NOT_ACTIVE");
+  });
+
+  it("returns 422 VALIDATION_ERROR when reason is missing", async () => {
+    const { app } = createBroadcastApp();
+    const response = await request(app)
+      .post(`/api/v1/alerts/${alertId}/cancel`)
+      .set("X-Dev-User-Id", officerId)
+      .send({});
+
+    expect(response.status).toBe(422);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("returns 422 VALIDATION_ERROR when reason is blank / whitespace only", async () => {
+    const { app } = createBroadcastApp();
+    const response = await request(app)
+      .post(`/api/v1/alerts/${alertId}/cancel`)
+      .set("X-Dev-User-Id", officerId)
+      .send({ reason: "          " });
+
+    expect(response.status).toBe(422);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("returns 422 VALIDATION_ERROR when reason is shorter than 10 characters", async () => {
+    const { app } = createBroadcastApp();
+    const response = await request(app)
+      .post(`/api/v1/alerts/${alertId}/cancel`)
+      .set("X-Dev-User-Id", officerId)
+      .send({ reason: "Too short" });
+
+    expect(response.status).toBe(422);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("returns 422 VALIDATION_ERROR when reason exceeds 500 characters", async () => {
+    const { app } = createBroadcastApp();
+    const response = await request(app)
+      .post(`/api/v1/alerts/${alertId}/cancel`)
+      .set("X-Dev-User-Id", officerId)
+      .send({ reason: "a".repeat(501) });
+
+    expect(response.status).toBe(422);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
+});
+
+describe("GET /api/v1/alerts/:alertId/deliveries & POST /api/v1/alerts/:alertId/deliveries/retry", () => {
+  it("returns delivery tracking summary for an alert", async () => {
+    const { app } = createBroadcastApp();
+    await request(app)
+      .post(`/api/v1/alerts/from-report/${reportId}`)
+      .set("X-Dev-User-Id", officerId);
+
+    const response = await request(app)
+      .get(`/api/v1/alerts/${alertId}/deliveries`)
+      .set("X-Dev-User-Id", officerId);
+
+    expect(response.status).toBe(200);
+    expect(response.body.alertId).toBe(alertId);
+    expect(response.body.total).toBe(0);
+    expect(response.body.pending).toBe(0);
+  });
+
+  it("retries eligible deliveries for an active alert", async () => {
+    const { app } = createBroadcastApp();
+    await request(app)
+      .post(`/api/v1/alerts/from-report/${reportId}`)
+      .set("X-Dev-User-Id", officerId);
+
+    const response = await request(app)
+      .post(`/api/v1/alerts/${alertId}/deliveries/retry`)
+      .set("X-Dev-User-Id", officerId);
+
+    expect(response.status).toBe(200);
+    expect(response.body.alertId).toBe(alertId);
+    expect(response.body.results).toBeInstanceOf(Array);
   });
 });
