@@ -947,6 +947,30 @@ button:hover {
   color: #fff;
 }
 
+.draft-handoff-link {
+  display: inline-flex;
+  min-height: 2.55rem;
+  align-items: center;
+  margin-top: 0.85rem;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid #286f50;
+  border-radius: 9px;
+  background: #286f50;
+  color: #fff;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.draft-handoff-link:hover {
+  border-color: #1d573d;
+  background: #1d573d;
+}
+
+.draft-handoff-link:focus-visible {
+  outline: 3px solid #6ba987;
+  outline-offset: 2px;
+}
+
 .report-review section[aria-label="Draft alert escalation"] dl {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
