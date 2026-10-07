@@ -14,7 +14,6 @@ export interface HttpHazardReportApiOptions {
 
 const DEV_USER_HEADER = "X-Dev-User-Id";
 
-/** Wraps fetch so a request that takes too long is cancelled instead of hanging forever. */
 export function fetchWithTimeout(timeoutMs: number, baseFetch: typeof fetch = fetch): typeof fetch {
   return async (input, init) => {
     const controller = new AbortController();
@@ -39,7 +38,6 @@ function translate(error: unknown): never {
   throw new HazardReportNetworkError();
 }
 
-/** The real server connection, built on the shared API client. */
 export function createHttpHazardReportApi(options: HttpHazardReportApiOptions): HazardReportApi {
   const client = createHttpClient({
     baseUrl: options.baseUrl,

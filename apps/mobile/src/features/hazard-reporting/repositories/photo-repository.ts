@@ -14,7 +14,8 @@ export class PhotoRepository {
   public async persist(sourceUri: string, clientReportId: string): Promise<PersistedPhoto> {
     try {
       return await this.storage.persist(sourceUri, clientReportId);
-    } catch {
+    } catch (error) {
+      console.warn("[photo-repository] persist failed:", error);
       throw new PhotoPersistenceError();
     }
   }
