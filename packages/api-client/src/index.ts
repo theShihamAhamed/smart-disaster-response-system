@@ -69,18 +69,7 @@ export function createHttpClient({
       return undefined;
     }
 
-    try {
-      return JSON.parse(text) as unknown;
-    } catch {
-      return {
-        error: {
-          code: "UNREADABLE_RESPONSE",
-          message: "The server sent a response that could not be read.",
-          fieldErrors: {},
-          details: {},
-        },
-      } satisfies ApiErrorEnvelope;
-    }
+    return JSON.parse(text) as unknown;
   }
 
   async function requestWithResponse<TResponse, TBody>(
