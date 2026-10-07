@@ -65,10 +65,7 @@ const INITIAL_ALERTS: readonly AlertSummaryItem[] = [
     status: "ACTIVE",
     version: 1,
     parentAlertId: null,
-    targetZoneIds: [
-      "30000000-0000-4000-8000-000000000001",
-      "30000000-0000-4000-8000-000000000002",
-    ],
+    targetZoneIds: ["30000000-0000-4000-8000-000000000001", "30000000-0000-4000-8000-000000000002"],
     issuedAt: "2026-09-25T10:00:00.000Z",
     cancelledAt: null,
     cancellationReason: null,
@@ -146,11 +143,7 @@ function extractErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-export function BroadcastHazardDashboard({
-  api,
-}: {
-  readonly api?: BroadcastApi | undefined;
-}) {
+export function BroadcastHazardDashboard({ api }: { readonly api?: BroadcastApi | undefined }) {
   const [alerts, setAlerts] = useState<readonly AlertSummaryItem[]>(INITIAL_ALERTS);
   const [selectedAlertId, setSelectedAlertId] = useState<string>(INITIAL_ALERTS[0]!.id);
   const [activeTab, setActiveTab] = useState<"ALL" | "DRAFTS" | "ACTIVE">("ALL");
@@ -164,9 +157,7 @@ export function BroadcastHazardDashboard({
     (selectedAlert.severity as any) ?? "WARNING",
   );
   const [message, setMessage] = useState(selectedAlert.message);
-  const [safetyInstructions, setSafetyInstructions] = useState(
-    selectedAlert.safetyInstructions,
-  );
+  const [safetyInstructions, setSafetyInstructions] = useState(selectedAlert.safetyInstructions);
   const [selectedZoneIds, setSelectedZoneIds] = useState<readonly string[]>(
     selectedAlert.targetZoneIds,
   );
@@ -353,9 +344,7 @@ export function BroadcastHazardDashboard({
   const handleConfirmBroadcast = async () => {
     setErrorMessage(undefined);
     const idempotencyKey =
-      broadcastAttempt?.alertId === selectedAlertId
-        ? broadcastAttempt.key
-        : crypto.randomUUID();
+      broadcastAttempt?.alertId === selectedAlertId ? broadcastAttempt.key : crypto.randomUUID();
     setBroadcastAttempt({ alertId: selectedAlertId, key: idempotencyKey });
 
     if (api) {
@@ -371,9 +360,8 @@ export function BroadcastHazardDashboard({
               pending: result.deliveries.filter((d) => d.status === "PENDING").length,
               pushSent: result.deliveries.filter((d) => d.status === "PUSH_SENT").length,
               pushFailed: result.deliveries.filter((d) => d.status === "PUSH_FAILED").length,
-              smsFallbackQueued: result.deliveries.filter(
-                (d) => d.status === "SMS_FALLBACK_QUEUED",
-              ).length,
+              smsFallbackQueued: result.deliveries.filter((d) => d.status === "SMS_FALLBACK_QUEUED")
+                .length,
               smsSent: result.deliveries.filter((d) => d.status === "SMS_SENT").length,
               failedFinal: result.deliveries.filter((d) => d.status === "FAILED_FINAL").length,
             },
@@ -568,8 +556,7 @@ export function BroadcastHazardDashboard({
     return true;
   });
 
-  const estimatedReach =
-    serverPreview?.estimatedRecipients ?? calculateEstimate(selectedZoneIds);
+  const estimatedReach = serverPreview?.estimatedRecipients ?? calculateEstimate(selectedZoneIds);
   const currentDeliveries = deliveryData[selectedAlertId];
 
   // Conflict check for preview (use server results if available, else local search)
@@ -657,16 +644,32 @@ export function BroadcastHazardDashboard({
         {selectedAlert.parentAlertId && (
           <div className="version-banner" role="note">
             <span>
-              Replacement Update: <strong>Version {selectedAlert.version}</strong> (replaces
-              parent alert <code>{selectedAlert.parentAlertId}</code>)
+              Replacement Update: <strong>Version {selectedAlert.version}</strong> (replaces parent
+              alert <code>{selectedAlert.parentAlertId}</code>)
             </span>
           </div>
         )}
 
-        {isLoading && <p className="status-message loading-state" role="status">{isLoading}</p>}
-        {statusMessage && <p className="status-message" role="status">{statusMessage}</p>}
-        {validationError && <p className="error-message" role="alert">{validationError}</p>}
-        {errorMessage && <p className="error-message" role="alert">{errorMessage}</p>}
+        {isLoading && (
+          <p className="status-message loading-state" role="status">
+            {isLoading}
+          </p>
+        )}
+        {statusMessage && (
+          <p className="status-message" role="status">
+            {statusMessage}
+          </p>
+        )}
+        {validationError && (
+          <p className="error-message" role="alert">
+            {validationError}
+          </p>
+        )}
+        {errorMessage && (
+          <p className="error-message" role="alert">
+            {errorMessage}
+          </p>
+        )}
 
         {/* WORKSPACE VIEW 1: DRAFT EDITOR */}
         {selectedAlert.status === "DRAFT" && !isPreviewing && (
@@ -706,7 +709,9 @@ export function BroadcastHazardDashboard({
                         onChange={() => toggleZone(zone.id)}
                       />
                       <div>
-                        <strong>{zone.code} — {zone.name}</strong>
+                        <strong>
+                          {zone.code} — {zone.name}
+                        </strong>
                         <span>
                           {zone.districtName} District (~
                           {(zone.populationEstimate ?? 0).toLocaleString()} citizens)
@@ -782,9 +787,9 @@ export function BroadcastHazardDashboard({
 
             {similarActiveAlerts.length > 0 && (
               <div className="conflict-warning" role="alert">
-                <strong>Similar Active Alert Detected:</strong> An active {selectedAlert.hazardType} alert
-                already covers overlapping target zones. Broadcasting this will result in concurrent
-                active hazard warnings.
+                <strong>Similar Active Alert Detected:</strong> An active {selectedAlert.hazardType}{" "}
+                alert already covers overlapping target zones. Broadcasting this will result in
+                concurrent active hazard warnings.
               </div>
             )}
 
@@ -810,8 +815,10 @@ export function BroadcastHazardDashboard({
                 <h4>Irreversible Action Confirmation</h4>
                 <p>
                   Broadcasting will immediately transition this alert to <strong>ACTIVE</strong>,
-                  initiate Push notifications across <strong>{selectedZoneIds.length} target zones</strong> (~{estimatedReach.toLocaleString()} recipients),
-                  and record an official DMC broadcast audit.
+                  initiate Push notifications across{" "}
+                  <strong>{selectedZoneIds.length} target zones</strong> (~
+                  {estimatedReach.toLocaleString()} recipients), and record an official DMC
+                  broadcast audit.
                 </p>
                 <div className="modal-actions">
                   <button disabled={Boolean(isLoading)} onClick={() => setIsConfirmingSend(false)}>
@@ -907,10 +914,7 @@ export function BroadcastHazardDashboard({
             </table>
 
             <div className="lifecycle-actions">
-              <button
-                disabled={Boolean(isLoading)}
-                onClick={handleCreateReplacement}
-              >
+              <button disabled={Boolean(isLoading)} onClick={handleCreateReplacement}>
                 {isLoading === "Creating replacement draft..."
                   ? "Creating replacement..."
                   : `Create Update / Replacement (v${selectedAlert.version + 1})`}
@@ -932,7 +936,8 @@ export function BroadcastHazardDashboard({
             <h3>Cancel Active Alert & Issue All Clear</h3>
             <p>
               Cancelling this alert will transition status to <strong>CANCELLED</strong> and
-              immediately transmit an <strong>[ALL CLEAR]</strong> notification to all target-zone recipients.
+              immediately transmit an <strong>[ALL CLEAR]</strong> notification to all target-zone
+              recipients.
             </p>
 
             <div className="form-group">
@@ -980,7 +985,8 @@ export function BroadcastHazardDashboard({
         {(selectedAlert.status === "SUPERSEDED" || selectedAlert.status === "CANCELLED") && (
           <section className="historical-view" aria-label="Historical Alert View">
             <div className="info-banner">
-              This alert is <strong>{selectedAlert.status}</strong> and is archived for audit purposes.
+              This alert is <strong>{selectedAlert.status}</strong> and is archived for audit
+              purposes.
               {selectedAlert.cancellationReason && (
                 <p>
                   <strong>Cancellation Reason:</strong> {selectedAlert.cancellationReason}

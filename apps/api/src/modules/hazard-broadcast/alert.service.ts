@@ -466,11 +466,7 @@ export class HazardBroadcastService {
         };
       }
 
-      if (
-        options?.minRetryIntervalMs &&
-        options.minRetryIntervalMs > 0 &&
-        delivery.attemptNo > 0
-      ) {
+      if (options?.minRetryIntervalMs && options.minRetryIntervalMs > 0 && delivery.attemptNo > 0) {
         const elapsedMs = this.now().getTime() - delivery.updatedAt.getTime();
         if (elapsedMs < options.minRetryIntervalMs) {
           return {
@@ -512,7 +508,9 @@ export class HazardBroadcastService {
           deliveryId: delivery.id,
           status: pushResult.success ? DeliveryStatus.PUSH_SENT : DeliveryStatus.PUSH_FAILED,
           attemptNo: 1,
-          lastFailureReason: pushResult.success ? null : (pushResult.error ?? "Push attempt failed"),
+          lastFailureReason: pushResult.success
+            ? null
+            : (pushResult.error ?? "Push attempt failed"),
           updatedAt: this.now(),
         });
         return { attempted: true, delivery: updated };

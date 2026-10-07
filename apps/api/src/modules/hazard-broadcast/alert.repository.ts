@@ -311,7 +311,8 @@ export class PrismaHazardBroadcastRepository implements HazardBroadcastRepositor
             alertId: current.parentAlertId,
             officerId: command.officerId,
             action: "SUPERSEDED",
-            reason: command.reason ?? `Superseded by alert version ${current.version} (${current.id})`,
+            reason:
+              command.reason ?? `Superseded by alert version ${current.version} (${current.id})`,
             createdAt: command.issuedAt,
           },
         });
@@ -509,9 +510,7 @@ export class PrismaHazardBroadcastRepository implements HazardBroadcastRepositor
     }));
   }
 
-  public async updateDelivery(
-    command: UpdateDeliveryCommand,
-  ): Promise<NotificationDeliveryRecord> {
+  public async updateDelivery(command: UpdateDeliveryCommand): Promise<NotificationDeliveryRecord> {
     const updated = await this.prisma.notificationDelivery.update({
       where: { id: command.deliveryId },
       data: {

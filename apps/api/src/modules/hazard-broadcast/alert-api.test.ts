@@ -178,7 +178,8 @@ class FakeBroadcastApiRepository implements HazardBroadcastRepository {
     if (query.targetZoneIds.length === 0) {
       return [];
     }
-    const excludeIds = query.excludeAlertIds ?? (query.excludeAlertId ? [query.excludeAlertId] : []);
+    const excludeIds =
+      query.excludeAlertIds ?? (query.excludeAlertId ? [query.excludeAlertId] : []);
     const results: AlertRecord[] = [];
     for (const alert of this.alerts.values()) {
       if (excludeIds.includes(alert.id)) {
@@ -366,9 +367,7 @@ class FakeBroadcastApiRepository implements HazardBroadcastRepository {
     return this.notificationDeliveries.filter((d) => d.alertId === alertId);
   }
 
-  public async updateDelivery(
-    command: UpdateDeliveryCommand,
-  ): Promise<NotificationDeliveryRecord> {
+  public async updateDelivery(command: UpdateDeliveryCommand): Promise<NotificationDeliveryRecord> {
     const index = this.notificationDeliveries.findIndex((d) => d.id === command.deliveryId);
     if (index === -1) {
       throw new Error(`Delivery ${command.deliveryId} not found`);
@@ -1366,9 +1365,7 @@ describe("POST /api/v1/alerts/:alertId/cancel", () => {
         targetZoneIds: [zone1],
       });
 
-    await request(app)
-      .post(`/api/v1/alerts/${alertId}/broadcast`)
-      .set("X-Dev-User-Id", officerId);
+    await request(app).post(`/api/v1/alerts/${alertId}/broadcast`).set("X-Dev-User-Id", officerId);
 
     const response = await request(app)
       .post(`/api/v1/alerts/${alertId}/cancel`)
@@ -1406,9 +1403,7 @@ describe("POST /api/v1/alerts/:alertId/cancel", () => {
         safetyInstructions: "Evacuate.",
         targetZoneIds: [zone1],
       });
-    await request(app)
-      .post(`/api/v1/alerts/${alertId}/broadcast`)
-      .set("X-Dev-User-Id", officerId);
+    await request(app).post(`/api/v1/alerts/${alertId}/broadcast`).set("X-Dev-User-Id", officerId);
 
     const response = await request(app)
       .post(`/api/v1/alerts/${alertId}/cancel`)
@@ -1433,9 +1428,7 @@ describe("POST /api/v1/alerts/:alertId/cancel", () => {
         safetyInstructions: "Evacuate.",
         targetZoneIds: [zone1],
       });
-    await request(app)
-      .post(`/api/v1/alerts/${alertId}/broadcast`)
-      .set("X-Dev-User-Id", officerId);
+    await request(app).post(`/api/v1/alerts/${alertId}/broadcast`).set("X-Dev-User-Id", officerId);
 
     const response = await request(app)
       .post(`/api/v1/alerts/${alertId}/cancel`)

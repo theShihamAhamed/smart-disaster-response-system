@@ -35,10 +35,7 @@ const mockActiveAlert = {
   status: "ACTIVE" as const,
   version: 1,
   parentAlertId: null,
-  targetZoneIds: [
-    "30000000-0000-4000-8000-000000000001",
-    "30000000-0000-4000-8000-000000000002",
-  ],
+  targetZoneIds: ["30000000-0000-4000-8000-000000000001", "30000000-0000-4000-8000-000000000002"],
   issuedAt: "2026-09-25T10:00:00.000Z",
   cancelledAt: null,
   cancellationReason: null,
@@ -232,10 +229,7 @@ describe("BroadcastHazardDashboard", () => {
     fireEvent.click(screen.getByRole("button", { name: /yes, broadcast alert now/i }));
 
     await waitFor(() => {
-      expect(api.broadcastAlert).toHaveBeenCalledWith(
-        mockDraftAlert.id,
-        expect.any(String),
-      );
+      expect(api.broadcastAlert).toHaveBeenCalledWith(mockDraftAlert.id, expect.any(String));
     });
 
     expect(screen.getByText(/alert broadcast successfully/i)).toBeInTheDocument();

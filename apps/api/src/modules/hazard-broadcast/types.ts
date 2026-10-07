@@ -284,10 +284,12 @@ export class AlertAlreadyActiveError extends Error {
 export class AlertNotActiveError extends Error {
   public readonly code = "ALERT_NOT_ACTIVE";
 
-  public constructor(public readonly status: AlertStatus, message?: string) {
+  public constructor(
+    public readonly status: AlertStatus,
+    message?: string,
+  ) {
     super(
-      message ??
-        `Cannot perform operation on alert with status ${status}. Alert must be ACTIVE.`,
+      message ?? `Cannot perform operation on alert with status ${status}. Alert must be ACTIVE.`,
     );
     this.name = "AlertNotActiveError";
   }

@@ -719,7 +719,9 @@ describe("PrismaHazardBroadcastRepository", () => {
       issuedAt: new Date("2026-10-06T11:00:00.000Z"),
     };
 
-    const mockParentUpdate = vi.fn().mockResolvedValue({ ...parentRow, status: AlertStatus.SUPERSEDED });
+    const mockParentUpdate = vi
+      .fn()
+      .mockResolvedValue({ ...parentRow, status: AlertStatus.SUPERSEDED });
     const mockReplacementUpdate = vi.fn().mockResolvedValue(activatedReplacementRow);
     const mockAuditCreate = vi.fn().mockResolvedValue({ id: "audit-1" });
 
@@ -728,13 +730,15 @@ describe("PrismaHazardBroadcastRepository", () => {
         const tx = {
           alert: {
             findUnique: vi.fn().mockImplementation(({ where }) => {
-              if (where.id === "50000000-0000-4000-8000-000000000002") return Promise.resolve(replacementRow);
+              if (where.id === "50000000-0000-4000-8000-000000000002")
+                return Promise.resolve(replacementRow);
               if (where.id === alertId) return Promise.resolve(parentRow);
               return Promise.resolve(null);
             }),
             update: vi.fn().mockImplementation(({ where }) => {
               if (where.id === alertId) return mockParentUpdate();
-              if (where.id === "50000000-0000-4000-8000-000000000002") return mockReplacementUpdate();
+              if (where.id === "50000000-0000-4000-8000-000000000002")
+                return mockReplacementUpdate();
               return Promise.resolve(null);
             }),
           },

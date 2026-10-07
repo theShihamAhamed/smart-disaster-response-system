@@ -525,9 +525,15 @@ button:hover {
   color: #637a72;
 }
 
-.text-success { color: #28a745; }
-.text-info { color: #17a2b8; }
-.text-danger { color: #dc3545; }
+.text-success {
+  color: #28a745;
+}
+.text-info {
+  color: #17a2b8;
+}
+.text-danger {
+  color: #dc3545;
+}
 
 /* Delivery Table */
 .delivery-log-header {

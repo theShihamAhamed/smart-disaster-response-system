@@ -19,21 +19,20 @@ import {
 const reportIdParamsSchema = z.object({ reportId: uuidSchema });
 const alertIdParamsSchema = z.object({ alertId: uuidSchema });
 
-const updateDraftBodySchema = z
-  .object({
-    severity: alertSeveritySchema,
-    message: z
-      .string()
-      .trim()
-      .min(1, "Alert message cannot be blank.")
-      .max(1000, "Alert message cannot exceed 1000 characters."),
-    safetyInstructions: z
-      .string()
-      .trim()
-      .min(1, "Safety instructions cannot be blank.")
-      .max(1000, "Safety instructions cannot exceed 1000 characters."),
-    targetZoneIds: z.array(uuidSchema).min(1, "At least one target zone must be selected."),
-  })
+const updateDraftBodySchema = z.object({
+  severity: alertSeveritySchema,
+  message: z
+    .string()
+    .trim()
+    .min(1, "Alert message cannot be blank.")
+    .max(1000, "Alert message cannot exceed 1000 characters."),
+  safetyInstructions: z
+    .string()
+    .trim()
+    .min(1, "Safety instructions cannot be blank.")
+    .max(1000, "Safety instructions cannot exceed 1000 characters."),
+  targetZoneIds: z.array(uuidSchema).min(1, "At least one target zone must be selected."),
+});
 const cancelAlertBodySchema = z
   .object({
     reason: z
@@ -71,13 +70,7 @@ function mapFeatureError(error: unknown): Error {
     );
   }
   if (error instanceof AlertNotActiveError) {
-    return new HttpError(
-      409,
-      "ALERT_NOT_ACTIVE",
-      error.message,
-      {},
-      { status: error.status },
-    );
+    return new HttpError(409, "ALERT_NOT_ACTIVE", error.message, {}, { status: error.status });
   }
   if (error instanceof AlertNotInDraftError) {
     return new HttpError(

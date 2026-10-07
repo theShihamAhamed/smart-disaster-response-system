@@ -1,9 +1,4 @@
-import type {
-  AlertSeverity,
-  AlertStatus,
-  DeliveryStatus,
-  HazardType,
-} from "@disaster/domain";
+import type { AlertSeverity, AlertStatus, DeliveryStatus, HazardType } from "@disaster/domain";
 
 export interface TargetZoneOption {
   readonly id: string;

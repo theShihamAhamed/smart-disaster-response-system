@@ -158,7 +158,8 @@ class FakeHazardBroadcastRepository implements HazardBroadcastRepository {
     if (query.targetZoneIds.length === 0) {
       return [];
     }
-    const excludeIds = query.excludeAlertIds ?? (query.excludeAlertId ? [query.excludeAlertId] : []);
+    const excludeIds =
+      query.excludeAlertIds ?? (query.excludeAlertId ? [query.excludeAlertId] : []);
     const results: AlertRecord[] = [];
     for (const alert of this.alerts.values()) {
       if (excludeIds.includes(alert.id)) {
@@ -346,9 +347,7 @@ class FakeHazardBroadcastRepository implements HazardBroadcastRepository {
     return this.notificationDeliveries.filter((d) => d.alertId === alertId);
   }
 
-  public async updateDelivery(
-    command: UpdateDeliveryCommand,
-  ): Promise<NotificationDeliveryRecord> {
+  public async updateDelivery(command: UpdateDeliveryCommand): Promise<NotificationDeliveryRecord> {
     const index = this.notificationDeliveries.findIndex((d) => d.id === command.deliveryId);
     if (index === -1) {
       throw new Error(`Delivery ${command.deliveryId} not found`);
@@ -1877,12 +1876,7 @@ describe("HazardBroadcastService - delivery fallback orchestration (Step 10)", (
 
     const repository = new FakeHazardBroadcastRepository();
     const resolver = async () => ["recipient-manual-1", "recipient-manual-2"];
-    const service = new HazardBroadcastService(
-      repository,
-      undefined,
-      () => fixedNow,
-      resolver,
-    );
+    const service = new HazardBroadcastService(repository, undefined, () => fixedNow, resolver);
 
     await service.createAlertFromVerifiedReport({ reportId, officerId });
     await service.updateDraftAlert({
@@ -1965,12 +1959,7 @@ describe("HazardBroadcastService - delivery tracking and retry processing (Step 
 
     const repository = new FakeHazardBroadcastRepository();
     const resolver = async () => ["recipient-fail-1"];
-    const service = new HazardBroadcastService(
-      repository,
-      undefined,
-      () => fixedNow,
-      resolver,
-    );
+    const service = new HazardBroadcastService(repository, undefined, () => fixedNow, resolver);
 
     await service.createAlertFromVerifiedReport({ reportId, officerId });
     await service.updateDraftAlert({
@@ -2016,12 +2005,7 @@ describe("HazardBroadcastService - delivery tracking and retry processing (Step 
 
     const repository = new FakeHazardBroadcastRepository();
     const resolver = async () => ["recipient-retry-success"];
-    const service = new HazardBroadcastService(
-      repository,
-      undefined,
-      () => fixedNow,
-      resolver,
-    );
+    const service = new HazardBroadcastService(repository, undefined, () => fixedNow, resolver);
 
     await service.createAlertFromVerifiedReport({ reportId, officerId });
     await service.updateDraftAlert({
@@ -2075,12 +2059,7 @@ describe("HazardBroadcastService - delivery tracking and retry processing (Step 
 
     const repository = new FakeHazardBroadcastRepository();
     const resolver = async () => ["recipient-max-fail"];
-    const service = new HazardBroadcastService(
-      repository,
-      undefined,
-      () => fixedNow,
-      resolver,
-    );
+    const service = new HazardBroadcastService(repository, undefined, () => fixedNow, resolver);
 
     await service.createAlertFromVerifiedReport({ reportId, officerId });
     await service.updateDraftAlert({
@@ -2138,12 +2117,7 @@ describe("HazardBroadcastService - delivery tracking and retry processing (Step 
     let currentTime = new Date("2026-10-07T12:00:00.000Z");
     const repository = new FakeHazardBroadcastRepository();
     const resolver = async () => ["recipient-backoff"];
-    const service = new HazardBroadcastService(
-      repository,
-      undefined,
-      () => currentTime,
-      resolver,
-    );
+    const service = new HazardBroadcastService(repository, undefined, () => currentTime, resolver);
 
     await service.createAlertFromVerifiedReport({ reportId, officerId });
     await service.updateDraftAlert({
@@ -2166,21 +2140,27 @@ describe("HazardBroadcastService - delivery tracking and retry processing (Step 
     );
 
     // Attempt 1 at T=0ms
-    const r1 = await serviceWithGateway.retryDelivery(initialDelivery.id, { minRetryIntervalMs: 5000 });
+    const r1 = await serviceWithGateway.retryDelivery(initialDelivery.id, {
+      minRetryIntervalMs: 5000,
+    });
     expect(r1.attempted).toBe(true);
     expect(r1.delivery.status).toBe(DeliveryStatus.PUSH_FAILED);
     expect(pushCalls).toBe(1);
 
     // Attempt 2 at T=2000ms (too soon, within 5000ms window) -> skipped
     currentTime = new Date("2026-10-07T12:00:02.000Z");
-    const r2 = await serviceWithGateway.retryDelivery(initialDelivery.id, { minRetryIntervalMs: 5000 });
+    const r2 = await serviceWithGateway.retryDelivery(initialDelivery.id, {
+      minRetryIntervalMs: 5000,
+    });
     expect(r2.attempted).toBe(false);
     expect(r2.skippedReason).toBe("RETRY_NOT_DUE_YET");
     expect(pushCalls).toBe(1);
 
     // Attempt 3 at T=6000ms (window passed) -> processed
     currentTime = new Date("2026-10-07T12:00:06.000Z");
-    const r3 = await serviceWithGateway.retryDelivery(initialDelivery.id, { minRetryIntervalMs: 5000 });
+    const r3 = await serviceWithGateway.retryDelivery(initialDelivery.id, {
+      minRetryIntervalMs: 5000,
+    });
     expect(r3.attempted).toBe(true);
     expect(pushCalls).toBe(2);
   });
@@ -2201,12 +2181,7 @@ describe("HazardBroadcastService - delivery tracking and retry processing (Step 
 
     const repository = new FakeHazardBroadcastRepository();
     const resolver = async () => ["recipient-concurrent"];
-    const service = new HazardBroadcastService(
-      repository,
-      undefined,
-      () => fixedNow,
-      resolver,
-    );
+    const service = new HazardBroadcastService(repository, undefined, () => fixedNow, resolver);
 
     await service.createAlertFromVerifiedReport({ reportId, officerId });
     await service.updateDraftAlert({
@@ -2288,12 +2263,7 @@ describe("HazardBroadcastService - delivery tracking and retry processing (Step 
   it("Test 11: getDeliveryTracking calculates counts accurately", async () => {
     const repository = new FakeHazardBroadcastRepository();
     const resolver = async () => ["rec-1", "rec-2", "rec-3"];
-    const service = new HazardBroadcastService(
-      repository,
-      undefined,
-      () => fixedNow,
-      resolver,
-    );
+    const service = new HazardBroadcastService(repository, undefined, () => fixedNow, resolver);
 
     await service.createAlertFromVerifiedReport({ reportId, officerId });
     await service.updateDraftAlert({
@@ -2349,12 +2319,7 @@ describe("HazardBroadcastService - delivery tracking and retry processing (Step 
 
     const repository = new FakeHazardBroadcastRepository();
     const resolver = async () => ["bulk-1", "bulk-2"];
-    const service = new HazardBroadcastService(
-      repository,
-      undefined,
-      () => fixedNow,
-      resolver,
-    );
+    const service = new HazardBroadcastService(repository, undefined, () => fixedNow, resolver);
 
     await service.createAlertFromVerifiedReport({ reportId, officerId });
     await service.updateDraftAlert({
@@ -2471,7 +2436,9 @@ describe("HazardBroadcastService - update / supersede workflow (Step 12)", () =>
     const parentAudits = repository.broadcastAudits.filter((a) => a.alertId === alertId);
     expect(parentAudits.some((a) => a.action === "SUPERSEDED")).toBe(true);
 
-    const replacementAudits = repository.broadcastAudits.filter((a) => a.alertId === replacementDraft.id);
+    const replacementAudits = repository.broadcastAudits.filter(
+      (a) => a.alertId === replacementDraft.id,
+    );
     expect(replacementAudits.some((a) => a.action === "ACTIVATED")).toBe(true);
 
     // Check delivery isolation: parent deliveries unchanged, replacement has new deliveries
@@ -2521,9 +2488,9 @@ describe("HazardBroadcastService - update / supersede workflow (Step 12)", () =>
     await service.broadcastAlert({ alertId: replacement1.id, officerId });
 
     // Parent is now SUPERSEDED. Activating replacement 2 must fail!
-    await expect(
-      service.broadcastAlert({ alertId: replacement2.id, officerId }),
-    ).rejects.toThrow(AlertNotActiveError);
+    await expect(service.broadcastAlert({ alertId: replacement2.id, officerId })).rejects.toThrow(
+      AlertNotActiveError,
+    );
   });
 
   describe("Step 13: Cancel Active Alert and All Clear", () => {
@@ -2587,9 +2554,9 @@ describe("HazardBroadcastService - update / supersede workflow (Step 12)", () =>
       ).rejects.toThrow("Cancellation reason must be at least 10 characters.");
 
       const tooLong = "A".repeat(501);
-      await expect(
-        service.cancelAlert({ alertId, officerId, reason: tooLong }),
-      ).rejects.toThrow("Cancellation reason cannot exceed 500 characters.");
+      await expect(service.cancelAlert({ alertId, officerId, reason: tooLong })).rejects.toThrow(
+        "Cancellation reason cannot exceed 500 characters.",
+      );
     });
 
     it("rejects cancellation of a DRAFT alert", async () => {
