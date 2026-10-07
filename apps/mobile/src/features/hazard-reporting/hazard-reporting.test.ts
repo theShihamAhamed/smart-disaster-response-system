@@ -25,7 +25,13 @@ const id = "11111111-1111-4111-8111-111111111111";
 const validDraft = () =>
   setGpsLocation(
     setPhoto(
-      setDescription(setHazardType(createDraft(() => id), "FLOOD"), "0123456789"),
+      setDescription(
+        setHazardType(
+          createDraft(() => id),
+          "FLOOD",
+        ),
+        "0123456789",
+      ),
       "photo://one.jpg",
     ),
     { latitude: 6.9271, longitude: 79.8612 },
@@ -76,7 +82,10 @@ describe("hazard reporting foundation", () => {
   });
 
   it("round-trips map coordinates and describes report states", () => {
-    const point = coordinatesToPoint({ latitude: 6.9, longitude: 79.9 }, { width: 100, height: 100 });
+    const point = coordinatesToPoint(
+      { latitude: 6.9, longitude: 79.9 },
+      { width: 100, height: 100 },
+    );
     const coordinates = pointToCoordinates(point, { width: 100, height: 100 });
     expect(coordinates.latitude).toBeCloseTo(6.9);
     expect(coordinates.longitude).toBeCloseTo(79.9);
@@ -85,34 +94,42 @@ describe("hazard reporting foundation", () => {
       longitude: DEFAULT_MAP_REGION.minLongitude,
     });
     expect(UserRole.CITIZEN).toBe("CITIZEN");
-    expect(reportBadge({
-      clientReportId: id,
-      state: "PENDING_SYNC",
-      payload: {} as never,
-      localPhotoUri: null,
-      createdAt: "2026-01-01",
-      attempts: 0,
-      lastError: null,
-      needsAttention: false,
-      acknowledgement: null,
-    }).label).toBe("Pending Sync");
+    expect(
+      reportBadge({
+        clientReportId: id,
+        state: "PENDING_SYNC",
+        payload: {} as never,
+        localPhotoUri: null,
+        createdAt: "2026-01-01",
+        attempts: 0,
+        lastError: null,
+        needsAttention: false,
+        acknowledgement: null,
+      }).label,
+    ).toBe("Pending Sync");
   });
 
   it("captures GPS success, permission failure, invalid data, and thrown errors", async () => {
-    await expect(captureGpsLocation({
-      getCurrentPosition: () =>
-        Promise.resolve({ status: "OK", latitude: 6.9, longitude: 79.9 }),
-    })).resolves.toEqual({ kind: "OK", position: { latitude: 6.9, longitude: 79.9 } });
-    await expect(captureGpsLocation({
-      getCurrentPosition: () => Promise.resolve({ status: "PERMISSION_DENIED" }),
-    })).resolves.toEqual({ kind: "FAILED", reason: "PERMISSION_DENIED" });
-    await expect(captureGpsLocation({
-      getCurrentPosition: () =>
-        Promise.resolve({ status: "OK", latitude: 99, longitude: 79.9 }),
-    })).resolves.toEqual({ kind: "FAILED", reason: "INVALID_POSITION" });
-    await expect(captureGpsLocation({
-      getCurrentPosition: () => Promise.reject(new Error("unavailable")),
-    })).resolves.toEqual({ kind: "FAILED", reason: "UNAVAILABLE" });
+    await expect(
+      captureGpsLocation({
+        getCurrentPosition: () => Promise.resolve({ status: "OK", latitude: 6.9, longitude: 79.9 }),
+      }),
+    ).resolves.toEqual({ kind: "OK", position: { latitude: 6.9, longitude: 79.9 } });
+    await expect(
+      captureGpsLocation({
+        getCurrentPosition: () => Promise.resolve({ status: "PERMISSION_DENIED" }),
+      }),
+    ).resolves.toEqual({ kind: "FAILED", reason: "PERMISSION_DENIED" });
+    await expect(
+      captureGpsLocation({
+        getCurrentPosition: () => Promise.resolve({ status: "OK", latitude: 99, longitude: 79.9 }),
+      }),
+    ).resolves.toEqual({ kind: "FAILED", reason: "INVALID_POSITION" });
+    await expect(
+      captureGpsLocation({
+        getCurrentPosition: () => Promise.reject(new Error("unavailable")),
+      }),
+    ).resolves.toEqual({ kind: "FAILED", reason: "UNAVAILABLE" });
   });
 
   it("wraps photo failures and stores offline reports safely", async () => {
@@ -146,8 +163,12 @@ describe("hazard reporting foundation", () => {
       photoRef: "uploaded://one",
       location: { latitude: 6.9, longitude: 79.9, source: "GPS" },
     } as never;
-    await repository.savePending({ payload, localPhotoUri: "local://one", createdAt: "2026-01-01" });
-    expect((await repository.list())).toHaveLength(1);
+    await repository.savePending({
+      payload,
+      localPhotoUri: "local://one",
+      createdAt: "2026-01-01",
+    });
+    expect(await repository.list()).toHaveLength(1);
     expect((await repository.recordFailure(id, "offline", false))?.attempts).toBe(1);
   });
 });
