@@ -371,6 +371,15 @@ describe("App Navigation", () => {
       listPendingReports: vi.fn().mockResolvedValue([]),
       getReportForReview: vi.fn().mockResolvedValue({} as any),
       decideReport: vi.fn().mockResolvedValue({}),
+      escalateVerifiedReport: vi.fn().mockResolvedValue({
+        httpStatus: 201,
+        draft: {
+          alertId: "70000000-0000-4000-8000-000000000001",
+          sourceReportId: "40000000-0000-4000-8000-000000000001",
+          status: "DRAFT",
+          version: 1,
+        },
+      }),
     };
     const mockBroadcastApi = createMockBroadcastApi();
 
