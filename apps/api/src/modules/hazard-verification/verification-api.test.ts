@@ -29,11 +29,12 @@ import type {
   HazardVerificationRepository,
   PendingReport,
   ReportForReview,
+  ReporterNotificationPort,
   VerificationDecisionRecord,
 } from "./types.js";
 import { HazardVerificationService } from "./hazard-verification.service.js";
 import request from "supertest";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const officerId = "10000000-0000-4000-8000-000000000003";
 const citizenId = "10000000-0000-4000-8000-000000000001";
@@ -213,7 +214,10 @@ class VerificationBroadcastRepository implements HazardBroadcastRepository {
   }
 }
 
-function createVerificationApp(repository = new VerificationApiRepository()) {
+function createVerificationApp(
+  repository = new VerificationApiRepository(),
+  reporterNotificationPort?: ReporterNotificationPort,
+) {
   const resolveDevelopmentAuthUser: ResolveDevelopmentAuthUser = async (id) => users[id] ?? null;
   const broadcastRepository = new VerificationBroadcastRepository(repository);
   return {
@@ -224,6 +228,7 @@ function createVerificationApp(repository = new VerificationApiRepository()) {
       verificationService: new HazardVerificationService(
         repository,
         () => new Date("2026-10-05T10:00:00.000Z"),
+        reporterNotificationPort,
       ),
       broadcastService: new HazardBroadcastService(broadcastRepository),
     }),
@@ -249,6 +254,7 @@ beforeEach(() => {
 
 afterEach(() => {
   delete process.env.DEV_AUTH_ENABLED;
+  vi.restoreAllMocks();
 });
 
 describe("verification API", () => {
@@ -409,6 +415,33 @@ describe("verification API", () => {
       .send({ result: VerificationResult.REJECTED });
     expect(invalid.status).toBe(422);
     expect(invalid.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("returns the committed REJECTED decision when reporter notification fails", async () => {
+    const repository = new VerificationApiRepository();
+    const requestDecisionNotification = vi.fn(async () => {
+      throw new Error("Notification adapter unavailable.");
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { app } = createVerificationApp(repository, { requestDecisionNotification });
+
+    const response = await officerRequest(app)
+      .post(`/api/v1/verification/reports/${reportId}/decision`)
+      .set("Idempotency-Key", commandKey)
+      .send({
+        result: VerificationResult.REJECTED,
+        reason: "  Reported location does not show a hazard.  ",
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      reportId,
+      result: VerificationResult.REJECTED,
+      reason: "Reported location does not show a hazard.",
+    });
+    expect(repository.commands).toHaveLength(1);
+    expect(await repository.listPendingReports()).toEqual([]);
+    expect(requestDecisionNotification).toHaveBeenCalledOnce();
   });
 
   it("maps an already-final report to the frozen conflict envelope", async () => {
