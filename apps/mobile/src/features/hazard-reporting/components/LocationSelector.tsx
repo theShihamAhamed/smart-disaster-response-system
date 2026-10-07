@@ -1,7 +1,7 @@
-import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { ManualMapPin } from './ManualMapPin';
-import { colors, radius } from '../../../theme';
+import React from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ManualMapPin } from "./ManualMapPin";
+import { colors, radius } from "../../../theme";
 
 type Coords = { latitude: number; longitude: number };
 
@@ -25,7 +25,7 @@ export function LocationSelector(p: Props) {
         onPress={p.onUseGps}
         accessibilityRole="button"
       >
-        <Text style={styles.primaryText}>📍  Use my GPS location</Text>
+        <Text style={styles.primaryText}>📍 Use my GPS location</Text>
       </Pressable>
 
       {p.gpsMessage ? (
@@ -39,7 +39,7 @@ export function LocationSelector(p: Props) {
         onPress={p.onOpenManual}
         accessibilityRole="button"
       >
-        <Text style={styles.secondaryText}>🗺️  Place a pin on the map instead</Text>
+        <Text style={styles.secondaryText}>🗺️ Place a pin on the map instead</Text>
       </Pressable>
 
       {p.showManualMap ? (
@@ -48,7 +48,7 @@ export function LocationSelector(p: Props) {
 
       {p.location ? (
         <View style={styles.okBox}>
-          <Text style={styles.okTitle}>Location set ({p.location.source ?? 'GPS'})</Text>
+          <Text style={styles.okTitle}>Location set ({p.location.source ?? "GPS"})</Text>
           <Text style={styles.okText}>
             {p.location.latitude}, {p.location.longitude}
           </Text>
@@ -64,25 +64,35 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     minHeight: 52,
     borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
-  primaryText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  primaryText: { color: "#fff", fontWeight: "800", fontSize: 16 },
   secondaryBtn: {
     marginTop: 10,
     minHeight: 48,
     borderRadius: radius.md,
     borderWidth: 2,
     borderColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
-  secondaryText: { color: colors.primary, fontWeight: '700', fontSize: 15 },
+  secondaryText: { color: colors.primary, fontWeight: "700", fontSize: 15 },
   pressed: { opacity: 0.75 },
-  warnBox: { backgroundColor: colors.warnSoft, padding: 12, borderRadius: radius.sm, marginTop: 10 },
-  warnText: { color: colors.warn, fontWeight: '600' },
-  okBox: { backgroundColor: colors.successSoft, padding: 12, borderRadius: radius.sm, marginTop: 12 },
-  okTitle: { color: colors.success, fontWeight: '800' },
+  warnBox: {
+    backgroundColor: colors.warnSoft,
+    padding: 12,
+    borderRadius: radius.sm,
+    marginTop: 10,
+  },
+  warnText: { color: colors.warn, fontWeight: "600" },
+  okBox: {
+    backgroundColor: colors.successSoft,
+    padding: 12,
+    borderRadius: radius.sm,
+    marginTop: 12,
+  },
+  okTitle: { color: colors.success, fontWeight: "800" },
   okText: { color: colors.text, marginTop: 2 },
-  error: { color: colors.danger, marginTop: 8, fontWeight: '600' },
+  error: { color: colors.danger, marginTop: 8, fontWeight: "600" },
 });

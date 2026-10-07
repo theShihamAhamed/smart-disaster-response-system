@@ -1,7 +1,8 @@
-import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { WebView, WebViewMessageEvent } from 'react-native-webview';
-import { colors, radius } from '../../../theme';
+import React from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { WebView } from "react-native-webview";
+import type { WebViewMessageEvent } from "react-native-webview";
+import { colors, radius } from "../../../theme";
 
 type Props = {
   pendingPin: { latitude: number; longitude: number } | null;
@@ -58,7 +59,7 @@ export function ManualMapPin({ pendingPin, onPlace, onConfirm }: Props) {
 
       <View style={styles.mapBox}>
         <WebView
-          originWhitelist={['*']}
+          originWhitelist={["*"]}
           source={{ html: MAP_HTML }}
           onMessage={handleMessage}
           javaScriptEnabled
@@ -78,7 +79,7 @@ export function ManualMapPin({ pendingPin, onPlace, onConfirm }: Props) {
             onPress={onConfirm}
             accessibilityRole="button"
           >
-            <Text style={styles.confirmText}>✓  Confirm this pin</Text>
+            <Text style={styles.confirmText}>✓ Confirm this pin</Text>
           </Pressable>
         </>
       ) : null}
@@ -92,19 +93,19 @@ const styles = StyleSheet.create({
   mapBox: {
     height: 360,
     borderRadius: radius.md,
-    overflow: 'hidden',
+    overflow: "hidden",
     borderWidth: 2,
     borderColor: colors.primary,
   },
   map: { flex: 1 },
-  coords: { marginTop: 10, textAlign: 'center', color: colors.text, fontWeight: '600' },
+  coords: { marginTop: 10, textAlign: "center", color: colors.text, fontWeight: "600" },
   confirm: {
     marginTop: 8,
     minHeight: 52,
     backgroundColor: colors.success,
     borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
-  confirmText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  confirmText: { color: "#fff", fontWeight: "800", fontSize: 16 },
 });

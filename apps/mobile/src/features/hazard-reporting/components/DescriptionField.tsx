@@ -1,6 +1,6 @@
-import React from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
-import { colors, radius } from '../../../theme';
+import React from "react";
+import { StyleSheet, Text, TextInput, View } from "react-native";
+import { colors, radius } from "../../../theme";
 
 type Props = { value: string; error?: string; onChange: (t: string) => void };
 
@@ -19,7 +19,7 @@ export function DescriptionField({ value, error, onChange }: Props) {
         maxLength={600}
         accessibilityLabel="Hazard description"
       />
-      <Text style={[styles.count, good && styles.countGood]}>{length} / 500  (minimum 10)</Text>
+      <Text style={[styles.count, good && styles.countGood]}>{length} / 500 (minimum 10)</Text>
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </View>
   );
@@ -34,11 +34,11 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     color: colors.text,
-    backgroundColor: '#F8FAFC',
-    textAlignVertical: 'top',
+    backgroundColor: "#F8FAFC",
+    textAlignVertical: "top",
   },
   inputError: { borderColor: colors.danger },
-  count: { textAlign: 'right', color: colors.muted, marginTop: 6 },
-  countGood: { color: colors.success, fontWeight: '700' },
-  error: { color: colors.danger, marginTop: 6, fontWeight: '600' },
+  count: { textAlign: "right", color: colors.muted, marginTop: 6 },
+  countGood: { color: colors.success, fontWeight: "700" },
+  error: { color: colors.danger, marginTop: 6, fontWeight: "600" },
 });

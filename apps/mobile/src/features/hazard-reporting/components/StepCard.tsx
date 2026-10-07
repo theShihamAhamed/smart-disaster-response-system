@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
-import { colors, radius, shadow } from '../../../theme';
+import React, { useEffect, useRef } from "react";
+import { Animated, StyleSheet, Text, View } from "react-native";
+import { colors, radius, shadow } from "../../../theme";
 
 type Props = {
   step: number;
@@ -20,7 +20,7 @@ export function StepCard({ step, title, done, children }: Props) {
     <Animated.View style={[styles.card, { opacity }]}>
       <View style={styles.header}>
         <View style={[styles.badge, done && styles.badgeDone]}>
-          <Text style={styles.badgeText}>{done ? '✓' : step}</Text>
+          <Text style={styles.badgeText}>{done ? "✓" : step}</Text>
         </View>
         <Text style={styles.title}>{title}</Text>
       </View>
@@ -37,16 +37,16 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     ...shadow,
   },
-  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 10 },
+  header: { flexDirection: "row", alignItems: "center", marginBottom: 12, gap: 10 },
   badge: {
     width: 30,
     height: 30,
     borderRadius: 15,
     backgroundColor: colors.navySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   badgeDone: { backgroundColor: colors.success },
-  badgeText: { color: '#fff', fontWeight: '800' },
-  title: { fontSize: 17, fontWeight: '700', color: colors.text, flex: 1 },
+  badgeText: { color: "#fff", fontWeight: "800" },
+  title: { fontSize: 17, fontWeight: "700", color: colors.text, flex: 1 },
 });

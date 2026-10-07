@@ -1,7 +1,7 @@
-import React from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
-import { colors, radius } from '../../../theme';
+import React from "react";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import { colors, radius } from "../../../theme";
 
 type Props = { photoUri: string | null; error?: string; onPicked: (uri: string) => void };
 
@@ -10,7 +10,7 @@ export function PhotoPicker({ photoUri, error, onPicked }: Props) {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) return;
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+      mediaTypes: ["images"],
       quality: 0.7,
       allowsMultipleSelection: false,
     });
@@ -27,7 +27,11 @@ export function PhotoPicker({ photoUri, error, onPicked }: Props) {
   return (
     <View>
       {photoUri ? (
-        <Image source={{ uri: photoUri }} style={styles.preview} accessibilityLabel="Photo preview" />
+        <Image
+          source={{ uri: photoUri }}
+          style={styles.preview}
+          accessibilityLabel="Photo preview"
+        />
       ) : (
         <View style={styles.empty}>
           <Text style={styles.emptyIcon}>📷</Text>
@@ -35,11 +39,17 @@ export function PhotoPicker({ photoUri, error, onPicked }: Props) {
         </View>
       )}
       <View style={styles.row}>
-        <Pressable style={({ pressed }) => [styles.btn, pressed && styles.pressed]} onPress={fromCamera}>
-          <Text style={styles.btnText}>{photoUri ? 'Retake' : 'Take photo'}</Text>
+        <Pressable
+          style={({ pressed }) => [styles.btn, pressed && styles.pressed]}
+          onPress={fromCamera}
+        >
+          <Text style={styles.btnText}>{photoUri ? "Retake" : "Take photo"}</Text>
         </Pressable>
-        <Pressable style={({ pressed }) => [styles.btnAlt, pressed && styles.pressed]} onPress={fromLibrary}>
-          <Text style={styles.btnAltText}>{photoUri ? 'Replace' : 'Choose photo'}</Text>
+        <Pressable
+          style={({ pressed }) => [styles.btnAlt, pressed && styles.pressed]}
+          onPress={fromLibrary}
+        >
+          <Text style={styles.btnAltText}>{photoUri ? "Replace" : "Choose photo"}</Text>
         </Pressable>
       </View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -48,40 +58,40 @@ export function PhotoPicker({ photoUri, error, onPicked }: Props) {
 }
 
 const styles = StyleSheet.create({
-  preview: { width: '100%', height: 200, borderRadius: radius.md, marginBottom: 10 },
+  preview: { width: "100%", height: 200, borderRadius: radius.md, marginBottom: 10 },
   empty: {
     height: 120,
     borderRadius: radius.md,
     borderWidth: 2,
-    borderStyle: 'dashed',
+    borderStyle: "dashed",
     borderColor: colors.border,
-    backgroundColor: '#F8FAFC',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#F8FAFC",
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 10,
   },
   emptyIcon: { fontSize: 30 },
   emptyText: { color: colors.muted, marginTop: 4 },
-  row: { flexDirection: 'row', gap: 10 },
+  row: { flexDirection: "row", gap: 10 },
   btn: {
     flex: 1,
     minHeight: 50,
     backgroundColor: colors.primary,
     borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
-  btnText: { color: '#fff', fontWeight: '800' },
+  btnText: { color: "#fff", fontWeight: "800" },
   btnAlt: {
     flex: 1,
     minHeight: 50,
     borderWidth: 2,
     borderColor: colors.primary,
     borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
-  btnAltText: { color: colors.primary, fontWeight: '800' },
+  btnAltText: { color: colors.primary, fontWeight: "800" },
   pressed: { opacity: 0.75 },
-  error: { color: colors.danger, marginTop: 8, fontWeight: '600' },
+  error: { color: colors.danger, marginTop: 8, fontWeight: "600" },
 });

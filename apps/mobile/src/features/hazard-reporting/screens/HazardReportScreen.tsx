@@ -20,6 +20,7 @@ import { SubmissionResult } from "../components/SubmissionResult";
 import { ReportStatusCard } from "../components/ReportStatusCard";
 import { StepCard } from "../components/StepCard";
 import { colors, radius } from "../../../theme";
+import logo from "../../../../assets/logo.png";
 
 export function HazardReportScreen() {
   const r = useHazardReport();
@@ -37,7 +38,7 @@ export function HazardReportScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View style={styles.header}>
-        <Image source={require("../../../../assets/logo.png")} style={styles.logo} />
+        <Image source={logo} style={styles.logo} />
         <View style={styles.headerText}>
           <Text style={styles.title}>Report a Hazard</Text>
           <Text style={styles.subtitle}>Your report helps responders reach people faster</Text>

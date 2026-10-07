@@ -1,11 +1,12 @@
 import React from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
+import logo from "../../../../assets/logo.png";
 
 export function SplashScreen() {
   return (
     <View style={styles.container}>
       <Image
-        source={require("../../../../assets/logo.png")}
+        source={logo}
         style={styles.logo}
         resizeMode="contain"
         accessibilityLabel="Disaster Coordination logo"
