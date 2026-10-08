@@ -844,7 +844,9 @@ export function BroadcastHazardDashboard({ api }: { readonly api?: BroadcastApi 
   /* ---------- Derived, display-only values ---------- */
   const activeAlerts = alerts.filter((a) => a.status === "ACTIVE");
   const draftCount = alerts.filter((a) => a.status === "DRAFT").length;
-  const citizensCovered = calculateEstimate([...new Set(activeAlerts.flatMap((a) => a.targetZoneIds))]);
+  const citizensCovered = calculateEstimate([
+    ...new Set(activeAlerts.flatMap((a) => a.targetZoneIds)),
+  ]);
   const lastIssued = alerts
     .map((a) => a.issuedAt)
     .filter((v): v is string => Boolean(v))
@@ -880,8 +882,8 @@ export function BroadcastHazardDashboard({ api }: { readonly api?: BroadcastApi 
           </span>
           <p className="bd-hero__title">Broadcast Hazard Alerts</p>
           <p className="bd-hero__subtitle">
-            Compose, validate and dispatch verified hazard warnings to citizens across target
-            zones — then monitor delivery in real time.
+            Compose, validate and dispatch verified hazard warnings to citizens across target zones
+            — then monitor delivery in real time.
           </p>
         </div>
         <dl className="bd-hero__stats">
@@ -1054,8 +1056,8 @@ export function BroadcastHazardDashboard({ api }: { readonly api?: BroadcastApi 
             <div className="bd-banner bd-banner--info" role="note">
               <Icon name="layers" />
               <span>
-                Replacement Update: <strong>Version {selectedAlert.version}</strong> (replaces parent
-                alert <code>{selectedAlert.parentAlertId}</code>)
+                Replacement Update: <strong>Version {selectedAlert.version}</strong> (replaces
+                parent alert <code>{selectedAlert.parentAlertId}</code>)
               </span>
             </div>
           )}
@@ -1602,11 +1604,7 @@ export function BroadcastHazardDashboard({ api }: { readonly api?: BroadcastApi 
 
             {/* ---------- VIEW 4: CANCEL / ALL CLEAR ---------- */}
             {isCancelling && (
-              <section
-                className="bd-cancel"
-                role="dialog"
-                aria-label="Cancel and All Clear Dialog"
-              >
+              <section className="bd-cancel" role="dialog" aria-label="Cancel and All Clear Dialog">
                 <div className="bd-cancel__head">
                   <span className="bd-cancel__icon">
                     <Icon name="shield" size={22} />

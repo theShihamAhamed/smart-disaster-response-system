@@ -57,7 +57,13 @@
   margin: 2.25rem 0 2rem;
   margin-inline: calc(50% - min(660px, 50vw - 1.25rem));
   color: var(--bd-ink);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -348,7 +354,9 @@
 .bd-segmented button.is-selected {
   background: var(--bd-surface);
   color: var(--bd-700);
-  box-shadow: var(--bd-shadow-sm), 0 0 0 1px var(--bd-line);
+  box-shadow:
+    var(--bd-shadow-sm),
+    0 0 0 1px var(--bd-line);
 }
 
 .bd-queue__list {
@@ -1484,7 +1492,11 @@ fieldset:disabled .bd-sev-card {
   border: 1px solid color-mix(in srgb, var(--bd-sev) 30%, transparent);
   border-radius: 18px;
   background:
-    radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--bd-sev) 16%, transparent), transparent 60%),
+    radial-gradient(
+      120% 90% at 100% 0%,
+      color-mix(in srgb, var(--bd-sev) 16%, transparent),
+      transparent 60%
+    ),
     linear-gradient(170deg, var(--bd-sev-bg), #fff 75%);
   box-shadow: 0 18px 40px -20px color-mix(in srgb, var(--bd-sev) 55%, transparent);
 }
