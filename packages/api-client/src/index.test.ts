@@ -87,6 +87,23 @@ describe("api client", () => {
     expect(headers.has("assignedAreaId")).toBe(false);
   });
 
+  it("exposes response status for callers that need to distinguish successful outcomes", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(JSON.stringify({ alertId: "alert-1" }), { status: 201 }));
+    const client = createHttpClient({ baseUrl: "http://localhost:4000/api/v1", fetchImpl });
+
+    await expect(
+      client.postWithResponse<{ alertId: string }>("/verification/escalations", {
+        headers: { "Idempotency-Key": "attempt-1" },
+      }),
+    ).resolves.toEqual({ status: 201, body: { alertId: "alert-1" } });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://localhost:4000/api/v1/verification/escalations",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
   it("patches typed JSON and parses a 200 response", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify({ status: "updated" }), {

@@ -46,6 +46,16 @@ export const errorHandler: ErrorRequestHandler = (error: unknown, _request, resp
       .json(errorEnvelope(error.code, error.message, error.fieldErrors, error.details));
     return;
   }
-
+  // Errors raised by express.json() when the body is not valid JSON or is too large.
+  const bodyErrorType =
+    typeof error === "object" && error !== null && "type" in error ? error.type : undefined;
+  if (bodyErrorType === "entity.parse.failed") {
+    response.status(400).json(errorEnvelope("INVALID_JSON", "The request body is not valid JSON."));
+    return;
+  }
+  if (bodyErrorType === "entity.too.large") {
+    response.status(413).json(errorEnvelope("PAYLOAD_TOO_LARGE", "The request body is too large."));
+    return;
+  }
   response.status(500).json(errorEnvelope("INTERNAL_ERROR", "An unexpected error occurred."));
 };

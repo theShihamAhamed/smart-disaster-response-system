@@ -1,8 +1,25 @@
-import { render, screen } from "@testing-library/react";
 import type { ReliefRequestDetails } from "@disaster/shared-types";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+
 import { App } from "./App";
 import { createMockApi } from "./features/relief-allocation/relief-test-fixtures";
+
+describe("integrated officer web shell", () => {
+  it("keeps the root DMC workspace and its officer areas", () => {
+    render(<App initialPath="/" />);
+
+    expect(screen.getByText("DMC Duty Officer Workspace")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "DMC Duty Officer" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "District Officer" })).toBeInTheDocument();
+  });
+
+  it("selects the broadcast workspace within the root DMC shell", () => {
+    render(<App initialPath="/" initialView="broadcast" />);
+
+    expect(screen.getByLabelText("Broadcast Hazard Alert Dashboard")).toBeInTheDocument();
+  });
+});
 
 describe("District Officer relief application shell", () => {
   it("presents semantic navigation, identity context, and the assessed workflow", async () => {
@@ -19,7 +36,7 @@ describe("District Officer relief application shell", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders an accessible workspace loading state", () => {
+  it("renders the direct relief-details route with an accessible loading state", () => {
     const api = createMockApi({
       getReliefRequest: vi.fn(() => new Promise<ReliefRequestDetails>(() => undefined)),
     });

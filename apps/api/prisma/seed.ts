@@ -166,7 +166,7 @@ async function seed() {
           reporterId: seedIds.citizen,
           hazardType: HazardType.FLOOD,
           description: "Flood water is crossing the main road.",
-          photoRef: "seed://photos/pending-flood.jpg",
+          photoRef: "/evidence/demo-flood.svg",
           locationId: seedIds.hazardLocation,
           submittedAt: fixedTime,
           status: ReportStatus.PENDING,

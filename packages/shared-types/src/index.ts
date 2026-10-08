@@ -1,4 +1,4 @@
-import type { UserRole } from "@disaster/domain";
+import type { HazardType, ReportStatus, UserRole } from "@disaster/domain";
 
 export * from "./relief.js";
 
@@ -36,4 +36,20 @@ export interface Paginated<T> {
 
 export interface HealthResponse {
   readonly status: "ok";
+}
+
+export interface SubmitHazardReportResponse {
+  readonly reportId: string;
+  readonly clientReportId: string;
+  readonly status: ReportStatus;
+  readonly hazardType: HazardType;
+  readonly outsideAssignedArea: boolean;
+  readonly requiresExtraReview: boolean;
+  readonly submittedAt: string;
+}
+
+export interface HazardReportStatusResponse {
+  readonly reportId: string;
+  readonly status: ReportStatus;
+  readonly reason?: string;
 }

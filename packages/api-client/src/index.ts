@@ -1,4 +1,9 @@
-import type { ApiErrorEnvelope, HealthResponse } from "@disaster/shared-types";
+import type {
+  ApiErrorEnvelope,
+  HazardReportStatusResponse,
+  HealthResponse,
+  SubmitHazardReportResponse,
+} from "@disaster/shared-types";
 
 export class ApiClientError extends Error {
   public constructor(
@@ -8,6 +13,19 @@ export class ApiClientError extends Error {
     super(body.error.message);
     this.name = "ApiClientError";
   }
+}
+
+function unreadableResponseBody(
+  message = "The API returned an unreadable response.",
+): ApiErrorEnvelope {
+  return {
+    error: {
+      code: "UNREADABLE_RESPONSE",
+      message,
+      fieldErrors: {},
+      details: {},
+    },
+  };
 }
 
 export interface HttpClientOptions {
@@ -23,6 +41,18 @@ export interface JsonRequestOptions<TBody> extends Omit<RequestInit, "body" | "m
 }
 
 type SupportedMethod = "GET" | "PATCH" | "POST";
+
+export interface SubmitHazardReportRequest {
+  readonly clientReportId: string;
+  readonly hazardType: string;
+  readonly description: string;
+  readonly photoRef: string;
+  readonly location: {
+    readonly latitude: number;
+    readonly longitude: number;
+    readonly source: string;
+  };
+}
 
 export function createHttpClient({
   baseUrl,
@@ -55,11 +85,11 @@ export function createHttpClient({
     return JSON.parse(text) as unknown;
   }
 
-  async function request<TResponse, TBody>(
+  async function requestWithResponse<TResponse, TBody>(
     method: SupportedMethod,
     path: string,
     requestOptions: JsonRequestOptions<TBody>,
-  ): Promise<TResponse> {
+  ): Promise<{ readonly status: number; readonly body: TResponse }> {
     const normalizedPath = path.startsWith("/") ? path : `/${path}`;
     const { body, headers: requestHeaders, ...fetchOptions } = requestOptions;
     const headers = buildHeaders(requestHeaders);
@@ -79,11 +109,28 @@ export function createHttpClient({
       headers,
       ...(serializedBody === undefined ? {} : { body: serializedBody }),
     });
-    const responseBody = await parseResponseBody(response);
+    let responseBody: unknown;
+    try {
+      responseBody = await parseResponseBody(response);
+    } catch (error) {
+      if (response.ok) {
+        throw error;
+      }
+      throw new ApiClientError(response.status, unreadableResponseBody());
+    }
     if (!response.ok) {
       throw new ApiClientError(response.status, responseBody as ApiErrorEnvelope);
     }
-    return responseBody as TResponse;
+    return { status: response.status, body: responseBody as TResponse };
+  }
+
+  async function request<TResponse, TBody>(
+    method: SupportedMethod,
+    path: string,
+    requestOptions: JsonRequestOptions<TBody>,
+  ): Promise<TResponse> {
+    const result = await requestWithResponse<TResponse, TBody>(method, path, requestOptions);
+    return result.body;
   }
 
   async function get<TResponse>(
@@ -100,6 +147,13 @@ export function createHttpClient({
     return request<TResponse, TBody>("POST", path, requestOptions);
   }
 
+  async function postWithResponse<TResponse, TBody = unknown>(
+    path: string,
+    requestOptions: JsonRequestOptions<TBody> = {},
+  ): Promise<{ readonly status: number; readonly body: TResponse }> {
+    return requestWithResponse<TResponse, TBody>("POST", path, requestOptions);
+  }
+
   async function patch<TResponse, TBody = unknown>(
     path: string,
     requestOptions: JsonRequestOptions<TBody> = {},
@@ -111,7 +165,40 @@ export function createHttpClient({
     return get<HealthResponse>("/health");
   }
 
-  return { get, getHealth, patch, post } as const;
+  async function submitHazardReport(
+    input: SubmitHazardReportRequest,
+    idempotencyKey: string = input.clientReportId,
+  ): Promise<SubmitHazardReportResponse> {
+    const result = await postWithResponse<
+      SubmitHazardReportResponse | undefined,
+      SubmitHazardReportRequest
+    >("/hazard-reports", {
+      body: input,
+      headers: { "Idempotency-Key": idempotencyKey },
+    });
+
+    if (result.body === undefined) {
+      throw new ApiClientError(result.status, unreadableResponseBody());
+    }
+
+    return result.body;
+  }
+
+  async function getHazardReportStatus(reportId: string): Promise<HazardReportStatusResponse> {
+    return get<HazardReportStatusResponse>(
+      `/hazard-reports/${encodeURIComponent(reportId)}/status`,
+    );
+  }
+
+  return {
+    get,
+    getHealth,
+    getHazardReportStatus,
+    patch,
+    post,
+    postWithResponse,
+    submitHazardReport,
+  } as const;
 }
 
 export type HttpClient = ReturnType<typeof createHttpClient>;
