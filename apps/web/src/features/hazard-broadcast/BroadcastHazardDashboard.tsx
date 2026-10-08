@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type {
   AlertPreviewInfo,
   AlertSummaryItem,
@@ -7,6 +7,7 @@ import type {
   DeliverySummary,
   TargetZoneOption,
 } from "./broadcast-api";
+import "./broadcast.css";
 
 const INITIAL_TARGET_ZONES: readonly TargetZoneOption[] = [
   {
@@ -142,6 +143,274 @@ function extractErrorMessage(error: unknown, fallback: string): string {
   }
   return fallback;
 }
+
+/* ------------------------------------------------------------------ */
+/* Presentation helpers (UI only — no business logic)                  */
+/* ------------------------------------------------------------------ */
+
+type IconName =
+  | "flood"
+  | "cyclone"
+  | "landslide"
+  | "drought"
+  | "alert"
+  | "broadcast"
+  | "users"
+  | "pin"
+  | "clock"
+  | "check"
+  | "checkCircle"
+  | "xCircle"
+  | "send"
+  | "save"
+  | "eye"
+  | "refresh"
+  | "layers"
+  | "arrowLeft"
+  | "shield"
+  | "info"
+  | "archive"
+  | "phone"
+  | "message"
+  | "bell"
+  | "loader"
+  | "edit"
+  | "inbox";
+
+const ICON_PATHS: Record<IconName, ReactNode> = {
+  flood: (
+    <>
+      <path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" />
+      <path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" />
+      <path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" />
+    </>
+  ),
+  cyclone: (
+    <>
+      <path d="M21 4H3" />
+      <path d="M18 8H6" />
+      <path d="M19 12H9" />
+      <path d="M16 16h-6" />
+      <path d="M11 20H9" />
+    </>
+  ),
+  landslide: <path d="m8 3 4 8 5-5 5 15H2L8 3z" />,
+  drought: (
+    <>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2m-7.07-17.07 1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+    </>
+  ),
+  alert: (
+    <>
+      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+      <path d="M12 9v4" />
+      <path d="M12 17h.01" />
+    </>
+  ),
+  broadcast: (
+    <>
+      <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9" />
+      <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5" />
+      <circle cx="12" cy="12" r="2" />
+      <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5" />
+      <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19" />
+    </>
+  ),
+  users: (
+    <>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </>
+  ),
+  pin: (
+    <>
+      <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+      <circle cx="12" cy="10" r="3" />
+    </>
+  ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 6v6l4 2" />
+    </>
+  ),
+  check: <path d="M20 6 9 17l-5-5" />,
+  checkCircle: (
+    <>
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+      <path d="m9 11 3 3L22 4" />
+    </>
+  ),
+  xCircle: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="m15 9-6 6" />
+      <path d="m9 9 6 6" />
+    </>
+  ),
+  send: (
+    <>
+      <path d="m22 2-7 20-4-9-9-4Z" />
+      <path d="M22 2 11 13" />
+    </>
+  ),
+  save: (
+    <>
+      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+      <path d="M17 21v-8H7v8" />
+      <path d="M7 3v5h8" />
+    </>
+  ),
+  eye: (
+    <>
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  refresh: (
+    <>
+      <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+      <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+      <path d="M16 16h5v5" />
+    </>
+  ),
+  layers: (
+    <>
+      <path d="m12 2 10 5-10 5L2 7l10-5z" />
+      <path d="m2 17 10 5 10-5" />
+      <path d="m2 12 10 5 10-5" />
+    </>
+  ),
+  arrowLeft: (
+    <>
+      <path d="m12 19-7-7 7-7" />
+      <path d="M19 12H5" />
+    </>
+  ),
+  shield: (
+    <>
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      <path d="m9 12 2 2 4-4" />
+    </>
+  ),
+  info: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 16v-4" />
+      <path d="M12 8h.01" />
+    </>
+  ),
+  archive: (
+    <>
+      <path d="M21 8v13H3V8" />
+      <path d="M1 3h22v5H1z" />
+      <path d="M10 12h4" />
+    </>
+  ),
+  phone: (
+    <>
+      <rect x="5" y="2" width="14" height="20" rx="2" />
+      <path d="M12 18h.01" />
+    </>
+  ),
+  message: <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />,
+  bell: (
+    <>
+      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+    </>
+  ),
+  loader: <path d="M21 12a9 9 0 1 1-6.219-8.56" />,
+  edit: (
+    <>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </>
+  ),
+  inbox: (
+    <>
+      <path d="M22 12h-6l-2 3h-4l-2-3H2" />
+      <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+    </>
+  ),
+};
+
+function Icon({
+  name,
+  size = 18,
+  className,
+}: {
+  readonly name: IconName;
+  readonly size?: number;
+  readonly className?: string;
+}) {
+  return (
+    <svg
+      className={className ? `bd-icon ${className}` : "bd-icon"}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {ICON_PATHS[name]}
+    </svg>
+  );
+}
+
+const HAZARD_ICON: Record<string, IconName> = {
+  FLOOD: "flood",
+  CYCLONE: "cyclone",
+  LANDSLIDE: "landslide",
+  DROUGHT: "drought",
+};
+
+const SEVERITY_OPTIONS = [
+  {
+    value: "ADVISORY",
+    label: "Advisory",
+    description: "General public awareness",
+  },
+  {
+    value: "WARNING",
+    label: "Warning",
+    description: "Potential danger — prepare",
+  },
+  {
+    value: "EVACUATION",
+    label: "Evacuation",
+    description: "Immediate danger — evacuate",
+  },
+] as const;
+
+const TOTAL_ZONE_POPULATION = INITIAL_TARGET_ZONES.reduce(
+  (sum, z) => sum + (z.populationEstimate ?? 0),
+  0,
+);
+
+function titleCase(value: string) {
+  return value.charAt(0) + value.slice(1).toLowerCase();
+}
+
+function hazardIcon(hazardType: string): IconName {
+  return HAZARD_ICON[hazardType] ?? "alert";
+}
+
+function percent(part: number, total: number) {
+  if (!total) return 0;
+  return Math.round((part / total) * 1000) / 10;
+}
+
+const DRAFT_STEPS = ["Compose", "Preview", "Confirm", "Live"] as const;
 
 export function BroadcastHazardDashboard({ api }: { readonly api?: BroadcastApi | undefined }) {
   const [alerts, setAlerts] = useState<readonly AlertSummaryItem[]>(INITIAL_ALERTS);
@@ -572,447 +841,949 @@ export function BroadcastHazardDashboard({ api }: { readonly api?: BroadcastApi 
             a.targetZoneIds.some((id) => selectedZoneIds.includes(id)),
         );
 
+  /* ---------- Derived, display-only values ---------- */
+  const activeAlerts = alerts.filter((a) => a.status === "ACTIVE");
+  const draftCount = alerts.filter((a) => a.status === "DRAFT").length;
+  const citizensCovered = calculateEstimate([
+    ...new Set(activeAlerts.flatMap((a) => a.targetZoneIds)),
+  ]);
+  const lastIssued = alerts
+    .map((a) => a.issuedAt)
+    .filter((v): v is string => Boolean(v))
+    .sort()
+    .at(-1);
+
+  const isDraftFlow = selectedAlert.status === "DRAFT" || isPreviewing;
+  const currentStep = isConfirmingSend ? 2 : isPreviewing ? 1 : 0;
+  const workspaceSeverity = (
+    selectedAlert.status === "DRAFT" ? severity : selectedAlert.severity
+  ).toLowerCase();
+  const reachShare = percent(calculateEstimate(selectedZoneIds), TOTAL_ZONE_POPULATION);
+
+  const summary = currentDeliveries?.summary;
+  const deliveredCount = summary ? summary.pushSent + summary.smsSent : 0;
+  const deliveryRate = summary ? percent(deliveredCount, summary.total) : 0;
+  const otherCount = summary
+    ? Math.max(summary.total - summary.pushSent - summary.smsSent - summary.failedFinal, 0)
+    : 0;
+
+  const selectedZones = INITIAL_TARGET_ZONES.filter((z) => selectedZoneIds.includes(z.id));
+  const busy = Boolean(isLoading);
+
   return (
-    <section className="broadcast-dashboard" aria-label="Broadcast Hazard Alert Dashboard">
-      {/* LEFT SIDEBAR: ALERTS & DRAFTS QUEUE */}
-      <aside className="alert-queue">
-        <div className="section-kicker">DMC Duty Officer</div>
-        <h2>Hazard Broadcast Queue</h2>
-
-        <div className="filter-tabs" role="tablist" aria-label="Filter alerts">
-          <button
-            role="tab"
-            aria-selected={activeTab === "ALL"}
-            className={activeTab === "ALL" ? "selected" : ""}
-            onClick={() => setActiveTab("ALL")}
-          >
-            All ({alerts.length})
-          </button>
-          <button
-            role="tab"
-            aria-selected={activeTab === "ACTIVE"}
-            className={activeTab === "ACTIVE" ? "selected" : ""}
-            onClick={() => setActiveTab("ACTIVE")}
-          >
-            Active ({alerts.filter((a) => a.status === "ACTIVE").length})
-          </button>
-          <button
-            role="tab"
-            aria-selected={activeTab === "DRAFTS"}
-            className={activeTab === "DRAFTS" ? "selected" : ""}
-            onClick={() => setActiveTab("DRAFTS")}
-          >
-            Drafts ({alerts.filter((a) => a.status === "DRAFT").length})
-          </button>
+    <section className="bd" aria-label="Broadcast Hazard Alert Dashboard">
+      {/* ============ COMMAND CENTRE HERO ============ */}
+      <header className="bd-hero">
+        <div className="bd-hero__glow" aria-hidden="true" />
+        <div className="bd-hero__intro">
+          <span className="bd-hero__eyebrow">
+            <span className="bd-live-dot" aria-hidden="true" />
+            Emergency Broadcast Centre
+          </span>
+          <p className="bd-hero__title">Broadcast Hazard Alerts</p>
+          <p className="bd-hero__subtitle">
+            Compose, validate and dispatch verified hazard warnings to citizens across target zones
+            — then monitor delivery in real time.
+          </p>
         </div>
+        <dl className="bd-hero__stats">
+          <div className="bd-stat">
+            <dt>
+              <Icon name="broadcast" size={16} /> Live broadcasts
+            </dt>
+            <dd>{activeAlerts.length}</dd>
+          </div>
+          <div className="bd-stat">
+            <dt>
+              <Icon name="edit" size={16} /> Drafts pending
+            </dt>
+            <dd>{draftCount}</dd>
+          </div>
+          <div className="bd-stat">
+            <dt>
+              <Icon name="users" size={16} /> Citizens covered
+            </dt>
+            <dd>{citizensCovered.toLocaleString()}</dd>
+          </div>
+          <div className="bd-stat">
+            <dt>
+              <Icon name="clock" size={16} /> Last dispatch
+            </dt>
+            <dd className="bd-stat__small">{lastIssued ? displayTime(lastIssued) : "—"}</dd>
+          </div>
+        </dl>
+      </header>
 
-        <ul className="alert-list">
-          {filteredAlerts.map((alert) => (
-            <li key={alert.id}>
-              <button
-                className={`alert-card ${selectedAlertId === alert.id ? "selected" : ""}`}
-                onClick={() => selectAlert(alert)}
-                aria-label={`Select alert ${alert.hazardType} Version ${alert.version} (${alert.status})`}
-              >
-                <div className="card-header">
-                  <strong>{alert.hazardType}</strong>
-                  <span className={`status-badge status-${alert.status.toLowerCase()}`}>
-                    {alert.status}
-                  </span>
-                </div>
-                <div className="card-meta">
-                  <span>Severity: {alert.severity}</span>
-                  <span>v{alert.version}</span>
-                </div>
-                <div className="card-zones">
-                  <span>{alert.targetZoneIds.length} Target Zone(s)</span>
-                  <small>{displayTime(alert.issuedAt ?? alert.cancelledAt)}</small>
-                </div>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </aside>
-
-      {/* RIGHT MAIN PANEL: ALERT OPERATIONS WORKSPACE */}
-      <article className="alert-workspace">
-        <div className="section-kicker">Broadcast Management</div>
-        <h2>
-          {selectedAlert.hazardType} Alert — v{selectedAlert.version} ({selectedAlert.status})
-        </h2>
-
-        {selectedAlert.parentAlertId && (
-          <div className="version-banner" role="note">
-            <span>
-              Replacement Update: <strong>Version {selectedAlert.version}</strong> (replaces parent
-              alert <code>{selectedAlert.parentAlertId}</code>)
+      <div className="bd-layout">
+        {/* ============ LEFT: ALERT QUEUE ============ */}
+        <aside className="bd-queue">
+          <div className="bd-queue__head">
+            <div>
+              <div className="bd-kicker">DMC Duty Officer</div>
+              <h2>Hazard Broadcast Queue</h2>
+            </div>
+            <span className="bd-queue__count" aria-hidden="true">
+              {alerts.length}
             </span>
           </div>
-        )}
 
-        {isLoading && (
-          <p className="status-message loading-state" role="status">
-            {isLoading}
-          </p>
-        )}
-        {statusMessage && (
-          <p className="status-message" role="status">
-            {statusMessage}
-          </p>
-        )}
-        {validationError && (
-          <p className="error-message" role="alert">
-            {validationError}
-          </p>
-        )}
-        {errorMessage && (
-          <p className="error-message" role="alert">
-            {errorMessage}
-          </p>
-        )}
+          <div className="bd-segmented" role="tablist" aria-label="Filter alerts">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "ALL"}
+              className={activeTab === "ALL" ? "is-selected" : ""}
+              onClick={() => setActiveTab("ALL")}
+            >
+              All ({alerts.length})
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "ACTIVE"}
+              className={activeTab === "ACTIVE" ? "is-selected" : ""}
+              onClick={() => setActiveTab("ACTIVE")}
+            >
+              Active ({activeAlerts.length})
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "DRAFTS"}
+              className={activeTab === "DRAFTS" ? "is-selected" : ""}
+              onClick={() => setActiveTab("DRAFTS")}
+            >
+              Drafts ({draftCount})
+            </button>
+          </div>
 
-        {/* WORKSPACE VIEW 1: DRAFT EDITOR */}
-        {selectedAlert.status === "DRAFT" && !isPreviewing && (
-          <section className="draft-editor" aria-label="Alert Draft Editor">
-            <h3>Edit Alert Content & Target Zones</h3>
-
-            <div className="form-group">
-              <label htmlFor="severity-select">Alert Severity Level</label>
-              <select
-                id="severity-select"
-                value={severity}
-                disabled={Boolean(isLoading)}
-                onChange={(e) => setSeverity(e.target.value as any)}
-              >
-                <option value="ADVISORY">ADVISORY (General Public Awareness)</option>
-                <option value="WARNING">WARNING (Potential Danger / Prepare)</option>
-                <option value="EVACUATION">EVACUATION (Immediate Danger / Evacuate)</option>
-              </select>
+          {filteredAlerts.length === 0 ? (
+            <div className="bd-empty">
+              <Icon name="inbox" size={28} />
+              <p>No alerts in this view.</p>
             </div>
-
-            <div className="form-group">
-              <label>Select Target Geographical Zones</label>
-              <div className="zones-grid" role="group" aria-label="Target Zones">
-                {INITIAL_TARGET_ZONES.map((zone) => {
-                  const isChecked = selectedZoneIds.includes(zone.id);
-                  return (
-                    <label
-                      key={zone.id}
-                      htmlFor={`zone-input-${zone.id}`}
-                      className={`zone-chip ${isChecked ? "checked" : ""}`}
-                    >
-                      <input
-                        id={`zone-input-${zone.id}`}
-                        type="checkbox"
-                        checked={isChecked}
-                        disabled={Boolean(isLoading)}
-                        onChange={() => toggleZone(zone.id)}
-                      />
-                      <div>
-                        <strong>
-                          {zone.code} — {zone.name}
-                        </strong>
-                        <span>
-                          {zone.districtName} District (~
-                          {(zone.populationEstimate ?? 0).toLocaleString()} citizens)
+          ) : (
+            <ul className="bd-queue__list">
+              {filteredAlerts.map((alert, index) => (
+                <li key={alert.id} style={{ animationDelay: `${index * 45}ms` }}>
+                  <button
+                    type="button"
+                    className={`bd-qcard sev-${alert.severity.toLowerCase()} ${
+                      selectedAlertId === alert.id ? "is-selected" : ""
+                    }`}
+                    onClick={() => selectAlert(alert)}
+                    aria-label={`Select alert ${alert.hazardType} Version ${alert.version} (${alert.status})`}
+                  >
+                    <span className="bd-qcard__icon">
+                      <Icon name={hazardIcon(alert.hazardType)} size={20} />
+                    </span>
+                    <span className="bd-qcard__body">
+                      <span className="bd-qcard__top">
+                        <strong>{titleCase(alert.hazardType)}</strong>
+                        <span className={`bd-pill bd-pill--${alert.status.toLowerCase()}`}>
+                          {alert.status}
                         </span>
+                      </span>
+                      <span className="bd-qcard__msg">{alert.message}</span>
+                      <span className="bd-qcard__meta">
+                        <span className={`bd-sev-tag sev-${alert.severity.toLowerCase()}`}>
+                          {titleCase(alert.severity)}
+                        </span>
+                        <span>v{alert.version}</span>
+                        <span>
+                          <Icon name="pin" size={12} /> {alert.targetZoneIds.length} zone
+                          {alert.targetZoneIds.length === 1 ? "" : "s"}
+                        </span>
+                      </span>
+                      <span className="bd-qcard__time">
+                        <Icon name="clock" size={12} />
+                        {displayTime(alert.issuedAt ?? alert.cancelledAt)}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </aside>
+
+        {/* ============ RIGHT: WORKSPACE ============ */}
+        <div className={`bd-workspace sev-${workspaceSeverity}`}>
+          <div className="bd-ws-head">
+            <span className="bd-ws-head__icon">
+              <Icon name={hazardIcon(selectedAlert.hazardType)} size={26} />
+            </span>
+            <div className="bd-ws-head__text">
+              <div className="bd-kicker">Broadcast Management</div>
+              <h2>{titleCase(selectedAlert.hazardType)} Alert</h2>
+              <div className="bd-ws-head__chips">
+                <span className={`bd-pill bd-pill--${selectedAlert.status.toLowerCase()}`}>
+                  {selectedAlert.status}
+                </span>
+                <span className="bd-chip">
+                  <Icon name="layers" size={13} /> Version {selectedAlert.version}
+                </span>
+                <span className="bd-chip">
+                  <Icon name="pin" size={13} /> {selectedAlert.targetZoneIds.length} target zone
+                  {selectedAlert.targetZoneIds.length === 1 ? "" : "s"}
+                </span>
+                {selectedAlert.issuedAt && (
+                  <span className="bd-chip">
+                    <Icon name="clock" size={13} /> {displayTime(selectedAlert.issuedAt)}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {isDraftFlow && (
+            <ol className="bd-steps" aria-label="Broadcast progress">
+              {DRAFT_STEPS.map((step, i) => (
+                <li
+                  key={step}
+                  className={i < currentStep ? "is-done" : i === currentStep ? "is-current" : ""}
+                >
+                  <span className="bd-steps__dot">
+                    {i < currentStep ? <Icon name="check" size={13} /> : i + 1}
+                  </span>
+                  <span className="bd-steps__label">{step}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+
+          {selectedAlert.parentAlertId && (
+            <div className="bd-banner bd-banner--info" role="note">
+              <Icon name="layers" />
+              <span>
+                Replacement Update: <strong>Version {selectedAlert.version}</strong> (replaces
+                parent alert <code>{selectedAlert.parentAlertId}</code>)
+              </span>
+            </div>
+          )}
+
+          {isLoading && (
+            <div className="bd-banner bd-banner--loading" role="status">
+              <Icon name="loader" className="bd-spin" />
+              <span>{isLoading}</span>
+            </div>
+          )}
+          {statusMessage && (
+            <div className="bd-banner bd-banner--success" role="status">
+              <Icon name="checkCircle" />
+              <span>{statusMessage}</span>
+            </div>
+          )}
+          {validationError && (
+            <div className="bd-banner bd-banner--error" role="alert">
+              <Icon name="alert" />
+              <span>{validationError}</span>
+            </div>
+          )}
+          {errorMessage && (
+            <div className="bd-banner bd-banner--error" role="alert">
+              <Icon name="xCircle" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
+          <div className="bd-view" key={`${selectedAlertId}-${isPreviewing}-${isCancelling}`}>
+            {/* ---------- VIEW 1: DRAFT EDITOR ---------- */}
+            {selectedAlert.status === "DRAFT" && !isPreviewing && (
+              <section className="bd-editor" aria-label="Alert Draft Editor">
+                <div className="bd-editor__form">
+                  <h3 className="bd-section-title">
+                    <Icon name="edit" /> Edit Alert Content &amp; Target Zones
+                  </h3>
+
+                  <fieldset className="bd-field" disabled={busy}>
+                    <legend className="bd-label">Alert Severity Level</legend>
+                    <div className="bd-severity">
+                      {SEVERITY_OPTIONS.map((opt) => (
+                        <label
+                          key={opt.value}
+                          htmlFor={`severity-${opt.value}`}
+                          className={`bd-sev-card sev-${opt.value.toLowerCase()} ${
+                            severity === opt.value ? "is-checked" : ""
+                          }`}
+                        >
+                          <input
+                            id={`severity-${opt.value}`}
+                            className="bd-sr-only"
+                            type="radio"
+                            name="bd-severity"
+                            value={opt.value}
+                            checked={severity === opt.value}
+                            onChange={() => setSeverity(opt.value)}
+                          />
+                          <span className="bd-sev-card__bar" aria-hidden="true" />
+                          <strong>{opt.label}</strong>
+                          <small>{opt.description}</small>
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+
+                  <div className="bd-field">
+                    <div className="bd-label-row">
+                      <span className="bd-label">Select Target Geographical Zones</span>
+                      <span className="bd-label-hint">
+                        {selectedZoneIds.length} of {INITIAL_TARGET_ZONES.length} selected
+                      </span>
+                    </div>
+                    <div className="bd-zones" role="group" aria-label="Target Zones">
+                      {INITIAL_TARGET_ZONES.map((zone) => {
+                        const isChecked = selectedZoneIds.includes(zone.id);
+                        return (
+                          <label
+                            key={zone.id}
+                            htmlFor={`zone-input-${zone.id}`}
+                            className={`bd-zone ${isChecked ? "is-checked" : ""}`}
+                          >
+                            <input
+                              id={`zone-input-${zone.id}`}
+                              className="bd-sr-only"
+                              type="checkbox"
+                              checked={isChecked}
+                              disabled={busy}
+                              onChange={() => toggleZone(zone.id)}
+                            />
+                            <span className="bd-zone__check" aria-hidden="true">
+                              <Icon name="check" size={12} />
+                            </span>
+                            <span className="bd-zone__body">
+                              <strong className="bd-zone__name">
+                                <span className="bd-zone__code">{zone.code}</span>
+                                <span className="bd-zone__sep"> — </span>
+                                {zone.name}
+                              </strong>
+                              <span className="bd-zone__meta">
+                                {zone.districtName} District (~
+                                {(zone.populationEstimate ?? 0).toLocaleString()} citizens)
+                              </span>
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <div className="bd-reach">
+                      <div className="bd-reach__text">
+                        <Icon name="users" size={16} />
+                        <span>
+                          Estimated reach{" "}
+                          <strong>~{calculateEstimate(selectedZoneIds).toLocaleString()}</strong>{" "}
+                          citizens
+                        </span>
+                        <em>{reachShare}% of monitored population</em>
                       </div>
+                      <div className="bd-meter" aria-hidden="true">
+                        <span style={{ width: `${reachShare}%` }} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bd-field">
+                    <label className="bd-label" htmlFor="alert-message">
+                      Public Alert Message
                     </label>
-                  );
-                })}
-              </div>
-            </div>
+                    <textarea
+                      id="alert-message"
+                      className="bd-input"
+                      rows={3}
+                      value={message}
+                      disabled={busy}
+                      placeholder="Enter clear, concise hazard alert details..."
+                      onChange={(e) => setMessage(e.target.value)}
+                    />
+                    <div className="bd-counter">
+                      <div className="bd-counter__bar" aria-hidden="true">
+                        <span style={{ width: `${Math.min(message.length / 10, 100)}%` }} />
+                      </div>
+                      <small>{message.length} / 1000 characters</small>
+                    </div>
+                  </div>
 
-            <div className="form-group">
-              <label htmlFor="alert-message">Public Alert Message</label>
-              <textarea
-                id="alert-message"
-                rows={3}
-                value={message}
-                disabled={Boolean(isLoading)}
-                placeholder="Enter clear, concise hazard alert details..."
-                onChange={(e) => setMessage(e.target.value)}
-              />
-              <small>{message.length} / 1000 characters</small>
-            </div>
+                  <div className="bd-field">
+                    <label className="bd-label" htmlFor="safety-instructions">
+                      Public Safety Instructions
+                    </label>
+                    <textarea
+                      id="safety-instructions"
+                      className="bd-input"
+                      rows={3}
+                      value={safetyInstructions}
+                      disabled={busy}
+                      placeholder="Enter protective actions for citizens (e.g. evacuation routes, high ground)..."
+                      onChange={(e) => setSafetyInstructions(e.target.value)}
+                    />
+                    <div className="bd-counter">
+                      <div className="bd-counter__bar" aria-hidden="true">
+                        <span
+                          style={{ width: `${Math.min(safetyInstructions.length / 10, 100)}%` }}
+                        />
+                      </div>
+                      <small>{safetyInstructions.length} / 1000 characters</small>
+                    </div>
+                  </div>
 
-            <div className="form-group">
-              <label htmlFor="safety-instructions">Public Safety Instructions</label>
-              <textarea
-                id="safety-instructions"
-                rows={3}
-                value={safetyInstructions}
-                disabled={Boolean(isLoading)}
-                placeholder="Enter protective actions for citizens (e.g. evacuation routes, high ground)..."
-                onChange={(e) => setSafetyInstructions(e.target.value)}
-              />
-              <small>{safetyInstructions.length} / 1000 characters</small>
-            </div>
+                  <div className="bd-actions">
+                    <button
+                      type="button"
+                      className="bd-btn bd-btn--ghost"
+                      disabled={busy}
+                      onClick={handleSaveDraft}
+                    >
+                      <Icon name="save" size={16} />
+                      {isLoading === "Saving draft..." ? "Saving..." : "Save Draft"}
+                    </button>
+                    <button
+                      type="button"
+                      className="bd-btn bd-btn--primary"
+                      disabled={busy}
+                      onClick={handlePreview}
+                    >
+                      <Icon name="eye" size={16} />
+                      {isLoading === "Loading preview..."
+                        ? "Loading..."
+                        : "Preview & Validate Broadcast"}
+                    </button>
+                  </div>
+                </div>
 
-            <div className="actions-bar">
-              <button disabled={Boolean(isLoading)} onClick={handleSaveDraft}>
-                {isLoading === "Saving draft..." ? "Saving..." : "Save Draft"}
-              </button>
-              <button
-                className="primary-button"
-                disabled={Boolean(isLoading)}
-                onClick={handlePreview}
-              >
-                {isLoading === "Loading preview..." ? "Loading..." : "Preview & Validate Broadcast"}
-              </button>
-            </div>
-          </section>
-        )}
-
-        {/* WORKSPACE VIEW 2: PREVIEW & CONFIRM BROADCAST */}
-        {isPreviewing && (
-          <section className="preview-section" aria-label="Alert Preview Section">
-            <h3>Broadcast Preview</h3>
-            <p className="preview-intro">
-              Review how the public alert will appear before triggering broadcast transmission.
-            </p>
-
-            <div className={`preview-card severity-${severity.toLowerCase()}`}>
-              <div className="preview-badge">{severity} LEVEL ALERT</div>
-              <h4>{selectedAlert.hazardType} EMERGENCY BROADCAST</h4>
-              <p className="preview-msg">{message}</p>
-              <div className="preview-instructions">
-                <strong>Safety Directive:</strong> {safetyInstructions}
-              </div>
-              <div className="preview-meta">
-                <span>Target Zones: {selectedZoneIds.length} Zone(s)</span>
-                <span>Reach: ~{estimatedReach.toLocaleString()} estimated recipients</span>
-              </div>
-            </div>
-
-            {similarActiveAlerts.length > 0 && (
-              <div className="conflict-warning" role="alert">
-                <strong>Similar Active Alert Detected:</strong> An active {selectedAlert.hazardType}{" "}
-                alert already covers overlapping target zones. Broadcasting this will result in
-                concurrent active hazard warnings.
-              </div>
+                <div className="bd-editor__aside" aria-hidden="true">
+                  <div className="bd-aside-label">
+                    <Icon name="phone" size={14} /> Live citizen preview
+                  </div>
+                  <PhonePreview
+                    hazardType={selectedAlert.hazardType}
+                    severity={severity}
+                    message={message}
+                    instructions={safetyInstructions}
+                    zones={selectedZones.map((z) => z.code ?? z.name)}
+                  />
+                </div>
+              </section>
             )}
 
-            {!isConfirmingSend ? (
-              <div className="actions-bar">
-                <button disabled={Boolean(isLoading)} onClick={() => setIsPreviewing(false)}>
-                  Back to Edit
-                </button>
-                <button
-                  className="primary-button send-button"
-                  disabled={Boolean(isLoading)}
-                  onClick={() => setIsConfirmingSend(true)}
-                >
-                  Confirm & Send Broadcast
-                </button>
-              </div>
-            ) : (
-              <div
-                className="confirmation-modal"
-                role="dialog"
-                aria-label="Confirm Broadcast Dialog"
-              >
-                <h4>Irreversible Action Confirmation</h4>
-                <p>
-                  Broadcasting will immediately transition this alert to <strong>ACTIVE</strong>,
-                  initiate Push notifications across{" "}
-                  <strong>{selectedZoneIds.length} target zones</strong> (~
-                  {estimatedReach.toLocaleString()} recipients), and record an official DMC
-                  broadcast audit.
+            {/* ---------- VIEW 2: PREVIEW & CONFIRM ---------- */}
+            {isPreviewing && (
+              <section className="bd-preview" aria-label="Alert Preview Section">
+                <h3 className="bd-section-title">
+                  <Icon name="eye" /> Broadcast Preview
+                </h3>
+                <p className="bd-muted">
+                  Review how the public alert will appear before triggering broadcast transmission.
                 </p>
-                <div className="modal-actions">
-                  <button disabled={Boolean(isLoading)} onClick={() => setIsConfirmingSend(false)}>
-                    Cancel
+
+                <div className="bd-preview__grid">
+                  <div className={`bd-official sev-${severity.toLowerCase()}`}>
+                    <div className="bd-official__head">
+                      <span className="bd-official__badge">
+                        <Icon name="alert" size={14} />
+                        {severity} LEVEL ALERT
+                      </span>
+                      <span className="bd-official__org">Disaster Management Centre</span>
+                    </div>
+                    <h4>{selectedAlert.hazardType} EMERGENCY BROADCAST</h4>
+                    <p className="bd-official__msg">{message}</p>
+                    <div className="bd-official__directive">
+                      <Icon name="shield" size={18} />
+                      <div>
+                        <strong>Safety Directive:</strong> {safetyInstructions}
+                      </div>
+                    </div>
+                    <div className="bd-official__meta">
+                      <span>
+                        <Icon name="pin" size={14} /> Target Zones: {selectedZoneIds.length} Zone(s)
+                      </span>
+                      <span>
+                        <Icon name="users" size={14} /> Reach: ~{estimatedReach.toLocaleString()}{" "}
+                        estimated recipients
+                      </span>
+                    </div>
+                    <div className="bd-official__zones">
+                      {selectedZones.map((z) => (
+                        <span key={z.id} className="bd-chip bd-chip--light">
+                          {z.code} · {z.districtName}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="bd-preview__phone" aria-hidden="true">
+                    <PhonePreview
+                      hazardType={selectedAlert.hazardType}
+                      severity={severity}
+                      message={message}
+                      instructions={safetyInstructions}
+                      zones={selectedZones.map((z) => z.code ?? z.name)}
+                    />
+                  </div>
+                </div>
+
+                {similarActiveAlerts.length > 0 && (
+                  <div className="bd-banner bd-banner--warning" role="alert">
+                    <Icon name="alert" />
+                    <span>
+                      <strong>Similar Active Alert Detected:</strong> An active{" "}
+                      {selectedAlert.hazardType} alert already covers overlapping target zones.
+                      Broadcasting this will result in concurrent active hazard warnings.
+                    </span>
+                  </div>
+                )}
+
+                <div className="bd-actions">
+                  <button
+                    type="button"
+                    className="bd-btn bd-btn--ghost"
+                    disabled={busy || isConfirmingSend}
+                    onClick={() => setIsPreviewing(false)}
+                  >
+                    <Icon name="arrowLeft" size={16} />
+                    Back to Edit
                   </button>
                   <button
-                    className="danger-button"
-                    disabled={Boolean(isLoading)}
-                    onClick={handleConfirmBroadcast}
+                    type="button"
+                    className="bd-btn bd-btn--primary bd-btn--glow"
+                    disabled={busy || isConfirmingSend}
+                    onClick={() => setIsConfirmingSend(true)}
                   >
-                    {isLoading === "Broadcasting alert..."
-                      ? "Broadcasting..."
-                      : "Yes, Broadcast Alert Now"}
+                    <Icon name="send" size={16} />
+                    Confirm &amp; Send Broadcast
                   </button>
                 </div>
-              </div>
-            )}
-          </section>
-        )}
 
-        {/* WORKSPACE VIEW 3: ACTIVE ALERT DETAILS & DELIVERY MONITORING */}
-        {selectedAlert.status === "ACTIVE" && !isCancelling && (
-          <section className="active-monitoring" aria-label="Active Alert Monitoring">
-            <div className="metrics-grid">
-              <div className="metric-card">
-                <span className="metric-value">
-                  {currentDeliveries?.summary.total.toLocaleString() ?? "—"}
-                </span>
-                <span className="metric-label">Total Recipients</span>
-              </div>
-              <div className="metric-card">
-                <span className="metric-value text-success">
-                  {currentDeliveries?.summary.pushSent.toLocaleString() ?? "—"}
-                </span>
-                <span className="metric-label">Push Delivered</span>
-              </div>
-              <div className="metric-card">
-                <span className="metric-value text-info">
-                  {currentDeliveries?.summary.smsSent.toLocaleString() ?? "—"}
-                </span>
-                <span className="metric-label">SMS Fallback Delivered</span>
-              </div>
-              <div className="metric-card">
-                <span className="metric-value text-danger">
-                  {currentDeliveries?.summary.failedFinal.toLocaleString() ?? "—"}
-                </span>
-                <span className="metric-label">Final Failures</span>
-              </div>
-            </div>
-
-            <div className="delivery-log-header">
-              <h3>Notification Delivery Log</h3>
-              {currentDeliveries && currentDeliveries.summary.failedFinal > 0 && (
-                <button
-                  className="secondary-button"
-                  disabled={Boolean(isLoading)}
-                  onClick={handleRetryDeliveries}
-                >
-                  {isLoading === "Retrying failed deliveries..."
-                    ? "Retrying..."
-                    : "Retry Failed Deliveries"}
-                </button>
-              )}
-            </div>
-
-            <table className="delivery-table" aria-label="Deliveries Table">
-              <thead>
-                <tr>
-                  <th>Recipient Ref</th>
-                  <th>Channel</th>
-                  <th>Status</th>
-                  <th>Attempts</th>
-                  <th>Failure Reason / Note</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentDeliveries?.deliveries.map((deliv) => (
-                  <tr key={deliv.id}>
-                    <td>
-                      <code>{deliv.recipientRef}</code>
-                    </td>
-                    <td>{deliv.channel ?? "PUSH"}</td>
-                    <td>
-                      <span className={`status-badge status-${deliv.status.toLowerCase()}`}>
-                        {deliv.status}
+                {isConfirmingSend && (
+                  <div className="bd-modal-backdrop">
+                    <div className="bd-modal" role="dialog" aria-label="Confirm Broadcast Dialog">
+                      <span className="bd-modal__icon">
+                        <Icon name="broadcast" size={28} />
                       </span>
-                    </td>
-                    <td>{deliv.attemptNo}</td>
-                    <td>{deliv.lastFailureReason ?? "Delivered successfully"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            <div className="lifecycle-actions">
-              <button disabled={Boolean(isLoading)} onClick={handleCreateReplacement}>
-                {isLoading === "Creating replacement draft..."
-                  ? "Creating replacement..."
-                  : `Create Update / Replacement (v${selectedAlert.version + 1})`}
-              </button>
-              <button
-                className="danger-button"
-                disabled={Boolean(isLoading)}
-                onClick={() => setIsCancelling(true)}
-              >
-                Cancel Alert / Issue All Clear
-              </button>
-            </div>
-          </section>
-        )}
-
-        {/* WORKSPACE VIEW 4: CANCEL / ALL CLEAR DIALOG */}
-        {isCancelling && (
-          <section className="cancel-dialog" role="dialog" aria-label="Cancel and All Clear Dialog">
-            <h3>Cancel Active Alert & Issue All Clear</h3>
-            <p>
-              Cancelling this alert will transition status to <strong>CANCELLED</strong> and
-              immediately transmit an <strong>[ALL CLEAR]</strong> notification to all target-zone
-              recipients.
-            </p>
-
-            <div className="form-group">
-              <label htmlFor="cancel-reason">
-                Official All Clear / Cancellation Reason (10-500 characters)
-              </label>
-              <textarea
-                id="cancel-reason"
-                rows={3}
-                value={cancelReason}
-                disabled={Boolean(isLoading)}
-                placeholder="e.g. Flood waters have completely receded and all roads are open..."
-                onChange={(e) => setCancelReason(e.target.value)}
-              />
-              <small>{cancelReason.length} / 500 characters (min 10)</small>
-            </div>
-
-            {cancelReason.trim().length >= 10 && (
-              <div className="all-clear-preview">
-                <strong>All Clear Notification Preview:</strong>
-                <p>
-                  <code>[ALL CLEAR] {cancelReason.trim()}</code>
-                </p>
-              </div>
+                      <h4>Irreversible Action Confirmation</h4>
+                      <p>
+                        Broadcasting will immediately transition this alert to{" "}
+                        <strong>ACTIVE</strong>, initiate Push notifications across{" "}
+                        <strong>{selectedZoneIds.length} target zones</strong> (~
+                        {estimatedReach.toLocaleString()} recipients), and record an official DMC
+                        broadcast audit.
+                      </p>
+                      <ul className="bd-modal__facts">
+                        <li>
+                          <Icon name="alert" size={14} /> Severity: <strong>{severity}</strong>
+                        </li>
+                        <li>
+                          <Icon name="pin" size={14} /> Zones:{" "}
+                          <strong>{selectedZones.map((z) => z.code).join(", ")}</strong>
+                        </li>
+                      </ul>
+                      <div className="bd-modal__actions">
+                        <button
+                          type="button"
+                          className="bd-btn bd-btn--ghost"
+                          disabled={busy}
+                          onClick={() => setIsConfirmingSend(false)}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="bd-btn bd-btn--danger"
+                          disabled={busy}
+                          onClick={handleConfirmBroadcast}
+                        >
+                          {isLoading === "Broadcasting alert..." ? (
+                            <Icon name="loader" size={16} className="bd-spin" />
+                          ) : (
+                            <Icon name="send" size={16} />
+                          )}
+                          {isLoading === "Broadcasting alert..."
+                            ? "Broadcasting..."
+                            : "Yes, Broadcast Alert Now"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </section>
             )}
 
-            <div className="modal-actions">
-              <button disabled={Boolean(isLoading)} onClick={() => setIsCancelling(false)}>
-                Dismiss / Keep Active
-              </button>
-              <button
-                className="danger-button"
-                disabled={Boolean(isLoading)}
-                onClick={handleCancelAlert}
-              >
-                {isLoading === "Cancelling alert..."
-                  ? "Cancelling..."
-                  : "Confirm All Clear & Cancel Alert"}
-              </button>
-            </div>
-          </section>
-        )}
+            {/* ---------- VIEW 3: ACTIVE MONITORING ---------- */}
+            {selectedAlert.status === "ACTIVE" && !isCancelling && (
+              <section className="bd-monitor" aria-label="Active Alert Monitoring">
+                <div className="bd-live-card">
+                  <div className="bd-live-card__badge">
+                    <span className="bd-live-dot" aria-hidden="true" /> LIVE
+                  </div>
+                  <p className="bd-live-card__msg">{selectedAlert.message}</p>
+                  <p className="bd-live-card__sub">
+                    <Icon name="shield" size={14} /> {selectedAlert.safetyInstructions}
+                  </p>
+                </div>
 
-        {/* WORKSPACE VIEW 5: HISTORICAL ALERT (SUPERSEDED / CANCELLED) */}
-        {(selectedAlert.status === "SUPERSEDED" || selectedAlert.status === "CANCELLED") && (
-          <section className="historical-view" aria-label="Historical Alert View">
-            <div className="info-banner">
-              This alert is <strong>{selectedAlert.status}</strong> and is archived for audit
-              purposes.
-              {selectedAlert.cancellationReason && (
-                <p>
-                  <strong>Cancellation Reason:</strong> {selectedAlert.cancellationReason}
-                </p>
-              )}
-            </div>
+                <div className="bd-kpis">
+                  <div className="bd-kpi">
+                    <span className="bd-kpi__icon">
+                      <Icon name="users" />
+                    </span>
+                    <span className="bd-kpi__value">
+                      {currentDeliveries?.summary.total.toLocaleString() ?? "—"}
+                    </span>
+                    <span className="bd-kpi__label">Total Recipients</span>
+                  </div>
+                  <div className="bd-kpi bd-kpi--success">
+                    <span className="bd-kpi__icon">
+                      <Icon name="bell" />
+                    </span>
+                    <span className="bd-kpi__value">
+                      {currentDeliveries?.summary.pushSent.toLocaleString() ?? "—"}
+                    </span>
+                    <span className="bd-kpi__label">Push Delivered</span>
+                  </div>
+                  <div className="bd-kpi bd-kpi--info">
+                    <span className="bd-kpi__icon">
+                      <Icon name="message" />
+                    </span>
+                    <span className="bd-kpi__value">
+                      {currentDeliveries?.summary.smsSent.toLocaleString() ?? "—"}
+                    </span>
+                    <span className="bd-kpi__label">SMS Fallback Delivered</span>
+                  </div>
+                  <div className="bd-kpi bd-kpi--danger">
+                    <span className="bd-kpi__icon">
+                      <Icon name="xCircle" />
+                    </span>
+                    <span className="bd-kpi__value">
+                      {currentDeliveries?.summary.failedFinal.toLocaleString() ?? "—"}
+                    </span>
+                    <span className="bd-kpi__label">Final Failures</span>
+                  </div>
+                </div>
 
-            <dl className="meta-list">
-              <dt>Hazard Type</dt>
-              <dd>{selectedAlert.hazardType}</dd>
-              <dt>Severity</dt>
-              <dd>{selectedAlert.severity}</dd>
-              <dt>Version</dt>
-              <dd>v{selectedAlert.version}</dd>
-              <dt>Issued At</dt>
-              <dd>{displayTime(selectedAlert.issuedAt)}</dd>
-              {selectedAlert.cancelledAt && (
-                <>
-                  <dt>Cancelled At</dt>
-                  <dd>{displayTime(selectedAlert.cancelledAt)}</dd>
-                </>
-              )}
-            </dl>
-          </section>
-        )}
-      </article>
+                {summary && summary.total > 0 && (
+                  <div className="bd-rate">
+                    <div className="bd-rate__head">
+                      <span>Delivery success rate</span>
+                      <strong>{deliveryRate}%</strong>
+                    </div>
+                    <div className="bd-stack" aria-hidden="true">
+                      <span
+                        className="bd-stack__push"
+                        style={{ width: `${percent(summary.pushSent, summary.total)}%` }}
+                      />
+                      <span
+                        className="bd-stack__sms"
+                        style={{ width: `${percent(summary.smsSent, summary.total)}%` }}
+                      />
+                      <span
+                        className="bd-stack__fail"
+                        style={{ width: `${percent(summary.failedFinal, summary.total)}%` }}
+                      />
+                      <span
+                        className="bd-stack__other"
+                        style={{ width: `${percent(otherCount, summary.total)}%` }}
+                      />
+                    </div>
+                    <ul className="bd-legend">
+                      <li>
+                        <i className="bd-stack__push" /> Push
+                      </li>
+                      <li>
+                        <i className="bd-stack__sms" /> SMS fallback
+                      </li>
+                      <li>
+                        <i className="bd-stack__fail" /> Failed
+                      </li>
+                      <li>
+                        <i className="bd-stack__other" /> Pending / in-flight
+                      </li>
+                    </ul>
+                  </div>
+                )}
+
+                <div className="bd-table-card">
+                  <div className="bd-table-card__head">
+                    <h3 className="bd-section-title">
+                      <Icon name="broadcast" /> Notification Delivery Log
+                    </h3>
+                    {currentDeliveries && currentDeliveries.summary.failedFinal > 0 && (
+                      <button
+                        type="button"
+                        className="bd-btn bd-btn--soft"
+                        disabled={busy}
+                        onClick={handleRetryDeliveries}
+                      >
+                        <Icon
+                          name="refresh"
+                          size={15}
+                          {...(isLoading === "Retrying failed deliveries..."
+                            ? { className: "bd-spin" }
+                            : {})}
+                        />
+                        {isLoading === "Retrying failed deliveries..."
+                          ? "Retrying..."
+                          : "Retry Failed Deliveries"}
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="bd-table-wrap">
+                    <table className="bd-table" aria-label="Deliveries Table">
+                      <thead>
+                        <tr>
+                          <th>Recipient Ref</th>
+                          <th>Channel</th>
+                          <th>Status</th>
+                          <th>Attempts</th>
+                          <th>Failure Reason / Note</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {currentDeliveries?.deliveries.map((deliv) => (
+                          <tr key={deliv.id}>
+                            <td>
+                              <code>{deliv.recipientRef}</code>
+                            </td>
+                            <td>
+                              <span className="bd-channel">
+                                <Icon
+                                  name={(deliv.channel ?? "PUSH") === "SMS" ? "message" : "bell"}
+                                  size={13}
+                                />
+                                {deliv.channel ?? "PUSH"}
+                              </span>
+                            </td>
+                            <td>
+                              <span className={`bd-pill bd-pill--${deliv.status.toLowerCase()}`}>
+                                {deliv.status}
+                              </span>
+                            </td>
+                            <td>
+                              <span className="bd-attempts">{deliv.attemptNo}</span>
+                            </td>
+                            <td className="bd-table__note">
+                              {deliv.lastFailureReason ?? "Delivered successfully"}
+                            </td>
+                          </tr>
+                        ))}
+                        {(!currentDeliveries || currentDeliveries.deliveries.length === 0) && (
+                          <tr>
+                            <td colSpan={5} className="bd-table__empty">
+                              Delivery telemetry will appear here once recipients are processed.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="bd-actions bd-actions--split">
+                  <button
+                    type="button"
+                    className="bd-btn bd-btn--ghost"
+                    disabled={busy}
+                    onClick={handleCreateReplacement}
+                  >
+                    <Icon name="layers" size={16} />
+                    {isLoading === "Creating replacement draft..."
+                      ? "Creating replacement..."
+                      : `Create Update / Replacement (v${selectedAlert.version + 1})`}
+                  </button>
+                  <button
+                    type="button"
+                    className="bd-btn bd-btn--danger-outline"
+                    disabled={busy}
+                    onClick={() => setIsCancelling(true)}
+                  >
+                    <Icon name="xCircle" size={16} />
+                    Cancel Alert / Issue All Clear
+                  </button>
+                </div>
+              </section>
+            )}
+
+            {/* ---------- VIEW 4: CANCEL / ALL CLEAR ---------- */}
+            {isCancelling && (
+              <section className="bd-cancel" role="dialog" aria-label="Cancel and All Clear Dialog">
+                <div className="bd-cancel__head">
+                  <span className="bd-cancel__icon">
+                    <Icon name="shield" size={22} />
+                  </span>
+                  <div>
+                    <h3>Cancel Active Alert &amp; Issue All Clear</h3>
+                    <p className="bd-muted">
+                      Cancelling this alert will transition status to <strong>CANCELLED</strong> and
+                      immediately transmit an <strong>[ALL CLEAR]</strong> notification to all
+                      target-zone recipients.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bd-field">
+                  <label className="bd-label" htmlFor="cancel-reason">
+                    Official All Clear / Cancellation Reason (10-500 characters)
+                  </label>
+                  <textarea
+                    id="cancel-reason"
+                    className="bd-input"
+                    rows={3}
+                    value={cancelReason}
+                    disabled={busy}
+                    placeholder="e.g. Flood waters have completely receded and all roads are open..."
+                    onChange={(e) => setCancelReason(e.target.value)}
+                  />
+                  <div className="bd-counter">
+                    <div
+                      className={`bd-counter__bar ${
+                        cancelReason.trim().length >= 10 ? "is-valid" : ""
+                      }`}
+                      aria-hidden="true"
+                    >
+                      <span style={{ width: `${Math.min(cancelReason.length / 5, 100)}%` }} />
+                    </div>
+                    <small>{cancelReason.length} / 500 characters (min 10)</small>
+                  </div>
+                </div>
+
+                {cancelReason.trim().length >= 10 && (
+                  <div className="bd-allclear">
+                    <span className="bd-allclear__icon">
+                      <Icon name="checkCircle" size={18} />
+                    </span>
+                    <div>
+                      <strong>All Clear Notification Preview:</strong>
+                      <p>
+                        <code>[ALL CLEAR] {cancelReason.trim()}</code>
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="bd-actions">
+                  <button
+                    type="button"
+                    className="bd-btn bd-btn--ghost"
+                    disabled={busy}
+                    onClick={() => setIsCancelling(false)}
+                  >
+                    <Icon name="arrowLeft" size={16} />
+                    Dismiss / Keep Active
+                  </button>
+                  <button
+                    type="button"
+                    className="bd-btn bd-btn--danger"
+                    disabled={busy}
+                    onClick={handleCancelAlert}
+                  >
+                    <Icon name="shield" size={16} />
+                    {isLoading === "Cancelling alert..."
+                      ? "Cancelling..."
+                      : "Confirm All Clear & Cancel Alert"}
+                  </button>
+                </div>
+              </section>
+            )}
+
+            {/* ---------- VIEW 5: HISTORICAL ---------- */}
+            {(selectedAlert.status === "SUPERSEDED" || selectedAlert.status === "CANCELLED") && (
+              <section className="bd-history" aria-label="Historical Alert View">
+                <div className="bd-banner bd-banner--muted">
+                  <Icon name="archive" />
+                  <div>
+                    This alert is <strong>{selectedAlert.status}</strong> and is archived for audit
+                    purposes.
+                    {selectedAlert.cancellationReason && (
+                      <p>
+                        <strong>Cancellation Reason:</strong> {selectedAlert.cancellationReason}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <blockquote className="bd-history__quote">
+                  <p>{selectedAlert.message}</p>
+                  <footer>
+                    <Icon name="shield" size={14} /> {selectedAlert.safetyInstructions}
+                  </footer>
+                </blockquote>
+
+                <dl className="bd-meta-grid">
+                  <div>
+                    <dt>Hazard Type</dt>
+                    <dd>{selectedAlert.hazardType}</dd>
+                  </div>
+                  <div>
+                    <dt>Severity</dt>
+                    <dd>{selectedAlert.severity}</dd>
+                  </div>
+                  <div>
+                    <dt>Version</dt>
+                    <dd>v{selectedAlert.version}</dd>
+                  </div>
+                  <div>
+                    <dt>Issued At</dt>
+                    <dd>{displayTime(selectedAlert.issuedAt)}</dd>
+                  </div>
+                  {selectedAlert.cancelledAt && (
+                    <div>
+                      <dt>Cancelled At</dt>
+                      <dd>{displayTime(selectedAlert.cancelledAt)}</dd>
+                    </div>
+                  )}
+                </dl>
+              </section>
+            )}
+          </div>
+        </div>
+      </div>
     </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Decorative citizen phone preview                                    */
+/* ------------------------------------------------------------------ */
+function PhonePreview({
+  hazardType,
+  severity,
+  message,
+  instructions,
+  zones,
+}: {
+  readonly hazardType: string;
+  readonly severity: string;
+  readonly message: string;
+  readonly instructions: string;
+  readonly zones: readonly string[];
+}) {
+  return (
+    <div className="bd-phone">
+      <div className="bd-phone__notch" />
+      <div className="bd-phone__status">
+        <span>9:41</span>
+        <span className="bd-phone__signal">
+          <i />
+          <i />
+          <i />
+        </span>
+      </div>
+      <div className="bd-phone__clock">
+        <span>9:41</span>
+        <small>Emergency Alerts</small>
+      </div>
+      <div className={`bd-notif sev-${severity.toLowerCase()}`}>
+        <div className="bd-notif__head">
+          <span className="bd-notif__app">
+            <Icon name="alert" size={12} />
+          </span>
+          <span>DMC ALERT · {severity}</span>
+          <span className="bd-notif__time">now</span>
+        </div>
+        <strong className="bd-notif__title">{titleCase(hazardType)} emergency</strong>
+        <p className="bd-notif__msg">{message.trim() || "Your alert message will appear here."}</p>
+        {instructions.trim() && <p className="bd-notif__sub">{instructions}</p>}
+        {zones.length > 0 && <span className="bd-notif__zones">{zones.join(" · ")}</span>}
+      </div>
+    </div>
   );
 }
