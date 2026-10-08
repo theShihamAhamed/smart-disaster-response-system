@@ -7,27 +7,42 @@ import {
 } from "./development-auth.js";
 import { createWebCors } from "./cors.js";
 import { errorEnvelope, errorHandler } from "./errors.js";
-import { createSeedGeoAdapter } from "./modules/hazard-submission/mock-geo-adapter.js";
+import { PrismaHazardBroadcastRepository } from "./modules/hazard-broadcast/alert.repository.js";
+import { createAlertRouter } from "./modules/hazard-broadcast/alert.routes.js";
+import { HazardBroadcastService } from "./modules/hazard-broadcast/alert.service.js";
 import { createPhotoRouter } from "./modules/hazard-submission/photo.routes.js";
 import { PrismaHazardSubmissionRepository } from "./modules/hazard-submission/hazard-submission.repository.js";
 import { HazardSubmissionService } from "./modules/hazard-submission/hazard-submission.service.js";
+import { createSeedGeoAdapter } from "./modules/hazard-submission/mock-geo-adapter.js";
 import { createHazardSubmissionRouter } from "./modules/hazard-submission/submission.routes.js";
 import { PrismaHazardVerificationRepository } from "./modules/hazard-verification/hazard-verification.repository.js";
 import { HazardVerificationService } from "./modules/hazard-verification/hazard-verification.service.js";
 import { createVerificationRouter } from "./modules/hazard-verification/verification.routes.js";
 import type { ReporterNotificationPort } from "./modules/hazard-verification/types.js";
-import { PrismaHazardBroadcastRepository } from "./modules/hazard-broadcast/alert.repository.js";
-import { HazardBroadcastService } from "./modules/hazard-broadcast/alert.service.js";
-import { createAlertRouter } from "./modules/hazard-broadcast/alert.routes.js";
+import { PrismaReliefAllocationCommandRepository } from "./modules/relief-allocation/prisma-relief-command-repository.js";
+import { PrismaReliefAllocationTransaction } from "./modules/relief-allocation/prisma-relief-allocation-transaction.js";
+import { createReliefCommandRouter } from "./modules/relief-allocation/relief-command-router.js";
+import {
+  ReliefAllocationCommandService,
+  type ReliefCommandOperations,
+} from "./modules/relief-allocation/relief-command-service.js";
+import { PrismaReliefReadRepository } from "./modules/relief-allocation/prisma-relief-read-repository.js";
+import { createReliefReadRouter } from "./modules/relief-allocation/relief-read-router.js";
+import {
+  ReliefReadService,
+  type ReliefReadOperations,
+} from "./modules/relief-allocation/relief-read-service.js";
 import { prisma } from "./prisma.js";
 import { requestId } from "./request-id.js";
 
 export interface AppDependencies {
   readonly resolveDevelopmentAuthUser?: ResolveDevelopmentAuthUser;
+  readonly broadcastService?: HazardBroadcastService;
   readonly submissionService?: HazardSubmissionService;
   readonly verificationService?: HazardVerificationService;
+  readonly reliefCommandService?: ReliefCommandOperations;
+  readonly reliefReadService?: ReliefReadOperations;
   readonly reporterNotificationPort?: ReporterNotificationPort;
-  readonly broadcastService?: HazardBroadcastService;
 }
 
 export function createApp(dependencies: AppDependencies = {}) {
@@ -73,6 +88,19 @@ export function createApp(dependencies: AppDependencies = {}) {
     createVerificationRouter(verificationService, broadcastService),
   );
   app.use(`${API_BASE_PATH}/alerts`, createAlertRouter(broadcastService));
+
+  const reliefReadService =
+    dependencies.reliefReadService ?? new ReliefReadService(new PrismaReliefReadRepository(prisma));
+  app.use(API_BASE_PATH, createReliefReadRouter(reliefReadService));
+
+  const reliefCommandRepository = new PrismaReliefAllocationCommandRepository(prisma);
+  const reliefCommandService =
+    dependencies.reliefCommandService ??
+    new ReliefAllocationCommandService(
+      reliefCommandRepository,
+      new PrismaReliefAllocationTransaction(prisma),
+    );
+  app.use(API_BASE_PATH, createReliefCommandRouter(reliefCommandService));
 
   app.use((_request, response) => {
     response.status(404).json(errorEnvelope("NOT_FOUND", "The requested resource was not found."));

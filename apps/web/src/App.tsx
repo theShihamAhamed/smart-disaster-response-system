@@ -1,35 +1,66 @@
-import { useState } from "react";
 import { PROJECT_NAME } from "@disaster/config";
-import { VerificationDashboard } from "./features/verification/VerificationDashboard";
-import type { VerificationApi } from "./features/verification/verification-api";
+import { useEffect, useState } from "react";
+
 import { BroadcastHazardDashboard } from "./features/hazard-broadcast/BroadcastHazardDashboard";
 import type { BroadcastApi } from "./features/hazard-broadcast/broadcast-api";
+import {
+  ReliefAllocationFeature,
+  type ReliefAllocationFeatureProps,
+} from "./features/relief-allocation/ReliefAllocationFeature";
+import { VerificationDashboard } from "./features/verification/VerificationDashboard";
+import type { VerificationApi } from "./features/verification/verification-api";
 
 const officerAreas = [
   {
     title: "DMC Duty Officer",
-    description: "Foundation for later hazard verification and alert broadcasting modules.",
+    description: "Hazard verification and alert-broadcast operations workspace.",
   },
   {
     title: "District Officer",
-    description: "Foundation for the later district-scoped relief allocation module.",
+    description: "District-scoped relief allocation is available under /relief.",
   },
 ] as const;
+
+export interface AppProps extends ReliefAllocationFeatureProps {
+  readonly verificationApi?: VerificationApi | undefined;
+  readonly broadcastApi?: BroadcastApi | undefined;
+  readonly initialView?: "verification" | "broadcast";
+}
 
 export function App({
   verificationApi,
   broadcastApi,
   initialView = "verification",
-}: {
-  readonly verificationApi?: VerificationApi | undefined;
-  readonly broadcastApi?: BroadcastApi | undefined;
-  readonly initialView?: "verification" | "broadcast";
-}) {
+  api,
+  initialPath,
+  createIdempotencyKey,
+}: AppProps) {
   const [currentView, setCurrentView] = useState<"verification" | "broadcast">(initialView);
+  const [browserPath, setBrowserPath] = useState(() => window.location.pathname);
+  const path = initialPath ?? browserPath;
+  const normalizedPath = path.replace(/\/+$/, "") || "/";
+  const isReliefPath = normalizedPath === "/relief" || normalizedPath.startsWith("/relief/");
+
+  useEffect(() => {
+    if (initialPath !== undefined) return;
+    const onPopState = () => setBrowserPath(window.location.pathname);
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [initialPath]);
+
+  if (isReliefPath) {
+    return (
+      <ReliefAllocationFeature
+        {...(api === undefined ? {} : { api })}
+        {...(initialPath === undefined ? {} : { initialPath })}
+        {...(createIdempotencyKey === undefined ? {} : { createIdempotencyKey })}
+      />
+    );
+  }
 
   return (
     <div className="app-shell">
-      {/* ── Top Navigation Bar ── */}
+      {/* Top Navigation Bar */}
       <header className="top-nav" role="banner">
         <div className="top-nav__inner">
           <div className="top-nav__brand">
@@ -119,7 +150,7 @@ export function App({
         </div>
       </header>
 
-      {/* ── Page Content ── */}
+      {/* Page Content */}
       <main className="app-main">
         {currentView === "verification" ? (
           verificationApi ? (
@@ -130,7 +161,7 @@ export function App({
                 <article key={area.title}>
                   <h2>{area.title}</h2>
                   <p>{area.description}</p>
-                  <span>Phase 0 shell</span>
+                  <span>Officer workspace</span>
                 </article>
               ))}
             </section>

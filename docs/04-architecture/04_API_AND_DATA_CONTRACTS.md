@@ -193,8 +193,8 @@ Header: `Idempotency-Key: <allocation-command-uuid>`
 {
   "requestVersion": 4,
   "items": [
-    { "requestItemId": "uuid", "quantity": 100 },
-    { "requestItemId": "uuid", "quantity": 8 }
+    { "requestItemId": "uuid", "allocateQty": 100 },
+    { "requestItemId": "uuid", "allocateQty": 8 }
   ],
   "shortages": [
     {
@@ -207,7 +207,9 @@ Header: `Idempotency-Key: <allocation-command-uuid>`
 }
 ```
 
-The client sends partner selections, not trusted shortage quantities. The server recalculates every shortage after re-reading stock and outstanding demand.
+The client sends partner selections, not trusted shortage quantities. The server recalculates every shortage after re-reading stock and outstanding demand. Idempotency is scoped by the trusted officer ID plus the `Idempotency-Key`; `requestVersion` is an optimistic-concurrency precondition and is excluded from canonical business-intent comparison.
+
+The operation commits stock deductions, allocation evidence, partner resupply, request state/version and optional rescue dispatch in one Serializable PostgreSQL transaction. Transient transaction conflicts are retried no more than twice after the original attempt; typed business conflicts are never retried.
 
 Response `201`, or `200` for an idempotent repeat:
 
@@ -243,7 +245,7 @@ Stable conflict codes:
 
 ### `GET /allocations/by-idempotency-key/{key}`
 
-Returns the officer's committed allocation receipt after an uncertain network result. It must not expose another officer's commands.
+Returns the authenticated District Officer's authoritative committed allocation receipt after an uncertain network result. Lookup is scoped by trusted `officerId` plus the UUID idempotency key; a missing key or a key owned by another officer returns `404` without disclosure. Receipt reconstruction uses persisted allocation items, resupply records correlated by the exact command commit timestamp and unique request supply item, optional dispatch data and the persisted request state. This recovery operation is read-only.
 
 ## Database constraints
 
