@@ -7,6 +7,7 @@ import {
   describeGpsFailure,
   formReducer,
   initialFormState,
+  placePin,
   pointToCoordinates,
   PhotoPersistenceError,
   PhotoRepository,
@@ -127,6 +128,30 @@ describe("hazard reporting foundation", () => {
       pin: { latitude: 6.9, longitude: 79.9 },
     });
     expect(formReducer(pinned, { type: "PIN_CONFIRMED" }).draft.location?.source).toBe("MANUAL");
+  });
+
+  it("distinguishes an unconfirmed pin from an invalid location", () => {
+    const draftWithPin = placePin(
+      createDraft(() => id),
+      { latitude: 6.9, longitude: 79.9 },
+    );
+    const unconfirmed = validateDraft(draftWithPin);
+    expect(unconfirmed).toMatchObject({
+      ok: false,
+      errors: { location: "Confirm the pin you placed so we know it is the right spot." },
+    });
+
+    const invalidLocation = setGpsLocation(
+      createDraft(() => id),
+      {
+        latitude: Number.NaN,
+        longitude: 79.9,
+      },
+    );
+    expect(validateDraft(invalidLocation)).toMatchObject({
+      ok: false,
+      errors: { location: "That location is not valid. Please choose it again." },
+    });
   });
 
   it("handles form actions and prevents duplicate submission", () => {

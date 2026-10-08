@@ -10,6 +10,7 @@ import { errorEnvelope, errorHandler } from "./errors.js";
 import { PrismaHazardBroadcastRepository } from "./modules/hazard-broadcast/alert.repository.js";
 import { createAlertRouter } from "./modules/hazard-broadcast/alert.routes.js";
 import { HazardBroadcastService } from "./modules/hazard-broadcast/alert.service.js";
+import { createPhotoRouter } from "./modules/hazard-submission/photo.routes.js";
 import { PrismaHazardSubmissionRepository } from "./modules/hazard-submission/hazard-submission.repository.js";
 import { HazardSubmissionService } from "./modules/hazard-submission/hazard-submission.service.js";
 import { createSeedGeoAdapter } from "./modules/hazard-submission/mock-geo-adapter.js";
@@ -17,6 +18,7 @@ import { createHazardSubmissionRouter } from "./modules/hazard-submission/submis
 import { PrismaHazardVerificationRepository } from "./modules/hazard-verification/hazard-verification.repository.js";
 import { HazardVerificationService } from "./modules/hazard-verification/hazard-verification.service.js";
 import { createVerificationRouter } from "./modules/hazard-verification/verification.routes.js";
+import type { ReporterNotificationPort } from "./modules/hazard-verification/types.js";
 import { PrismaReliefAllocationCommandRepository } from "./modules/relief-allocation/prisma-relief-command-repository.js";
 import { PrismaReliefAllocationTransaction } from "./modules/relief-allocation/prisma-relief-allocation-transaction.js";
 import { createReliefCommandRouter } from "./modules/relief-allocation/relief-command-router.js";
@@ -40,6 +42,7 @@ export interface AppDependencies {
   readonly verificationService?: HazardVerificationService;
   readonly reliefCommandService?: ReliefCommandOperations;
   readonly reliefReadService?: ReliefReadOperations;
+  readonly reporterNotificationPort?: ReporterNotificationPort;
 }
 
 export function createApp(dependencies: AppDependencies = {}) {
@@ -48,6 +51,10 @@ export function createApp(dependencies: AppDependencies = {}) {
   app.use(createWebCors());
   app.use(express.json({ limit: "1mb" }));
   app.use(requestId);
+  app.use((request, _response, next) => {
+    console.log(`[request] ${request.method} ${request.originalUrl}`);
+    next();
+  });
 
   const health = (_request: express.Request, response: express.Response) => {
     response.status(200).json({ status: "ok" });
@@ -64,10 +71,15 @@ export function createApp(dependencies: AppDependencies = {}) {
       new PrismaHazardSubmissionRepository(prisma),
       createSeedGeoAdapter(),
     );
+  app.use(`${API_BASE_PATH}/hazard-reports/photos`, createPhotoRouter());
   app.use(`${API_BASE_PATH}/hazard-reports`, createHazardSubmissionRouter(submissionService));
   const verificationService =
     dependencies.verificationService ??
-    new HazardVerificationService(new PrismaHazardVerificationRepository(prisma));
+    new HazardVerificationService(
+      new PrismaHazardVerificationRepository(prisma),
+      undefined,
+      dependencies.reporterNotificationPort,
+    );
   const broadcastService =
     dependencies.broadcastService ??
     new HazardBroadcastService(new PrismaHazardBroadcastRepository(prisma));

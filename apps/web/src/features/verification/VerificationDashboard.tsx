@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { PendingReport, ReportReview, VerificationApi } from "./verification-api";
+import type { DraftAlert, PendingReport, ReportReview, VerificationApi } from "./verification-api";
 
 function displayTime(value: string) {
   return new Date(value).toLocaleString("en-GB", {
@@ -7,6 +7,20 @@ function displayTime(value: string) {
     timeStyle: "short",
     timeZone: "UTC",
   });
+}
+
+function isValidDraftForReport(draft: unknown, reportId: string): draft is DraftAlert {
+  if (typeof draft !== "object" || draft === null) return false;
+  const candidate = draft as Partial<DraftAlert>;
+  return (
+    typeof candidate.alertId === "string" &&
+    candidate.alertId.trim().length > 0 &&
+    candidate.sourceReportId === reportId &&
+    candidate.status === "DRAFT" &&
+    typeof candidate.version === "number" &&
+    Number.isInteger(candidate.version) &&
+    candidate.version > 0
+  );
 }
 
 export function VerificationDashboard({ api }: { readonly api: VerificationApi }) {
@@ -362,6 +376,14 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
                         <dt>Version</dt>
                         <dd>{escalationResult.draft.version}</dd>
                       </dl>
+                      {isValidDraftForReport(escalationResult.draft, review.id) && (
+                        <a
+                          className="draft-handoff-link"
+                          href={`/broadcast/alerts/${encodeURIComponent(escalationResult.draft.alertId)}`}
+                        >
+                          Open Draft Alert
+                        </a>
+                      )}
                     </div>
                   )}
                 </section>

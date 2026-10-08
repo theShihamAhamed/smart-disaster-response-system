@@ -177,15 +177,18 @@ describe("VerificationDashboard", () => {
       },
     }));
     const broadcastAlert = vi.fn();
+    const activateAlert = vi.fn();
     const client = {
       ...api({
         getReportForReview: vi.fn(async () => verifiedReview),
         escalateVerifiedReport,
       }),
       broadcastAlert,
+      activateAlert,
     };
     const view = render(<VerificationDashboard api={client} />);
     const dashboard = await selectReport(view.container, /flood/i);
+    expect(dashboard.queryByRole("link", { name: "Open Draft Alert" })).not.toBeInTheDocument();
 
     fireEvent.click(dashboard.getByRole("button", { name: "Escalate to Warning" }));
 
@@ -204,23 +207,43 @@ describe("VerificationDashboard", () => {
     expect(dashboard.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
     expect(escalateVerifiedReport).toHaveBeenCalledWith(report.id, expect.any(String));
     expect(escalateVerifiedReport.mock.calls[0]?.[1].trim()).not.toBe("");
+    const openDraftLink = escalationStatus.getByRole("link", { name: "Open Draft Alert" });
+    expect(openDraftLink).toHaveAttribute(
+      "href",
+      "/broadcast/alerts/70000000-0000-4000-8000-000000000001",
+    );
+    const preventNavigation = (event: MouseEvent) => event.preventDefault();
+    document.addEventListener("click", preventNavigation, true);
+    fireEvent.click(openDraftLink);
+    document.removeEventListener("click", preventNavigation, true);
+    expect(escalateVerifiedReport).toHaveBeenCalledTimes(1);
+    expect(client.decideReport).not.toHaveBeenCalled();
     expect(broadcastAlert).not.toHaveBeenCalled();
+    expect(activateAlert).not.toHaveBeenCalled();
   });
   it("handles an existing DRAFT returned with HTTP 200", async () => {
-    const client = api({
-      getReportForReview: vi.fn(async () => verifiedReview),
-      escalateVerifiedReport: vi.fn(async () => ({
-        httpStatus: 200 as const,
-        draft: {
-          alertId: "70000000-0000-4000-8000-000000000001",
-          sourceReportId: report.id,
-          status: "DRAFT" as const,
-          version: 2,
-        },
-      })),
-    });
+    const escalateVerifiedReport = vi.fn(async () => ({
+      httpStatus: 200 as const,
+      draft: {
+        alertId: "70000000-0000-4000-8000-000000000001",
+        sourceReportId: report.id,
+        status: "DRAFT" as const,
+        version: 2,
+      },
+    }));
+    const broadcastAlert = vi.fn();
+    const activateAlert = vi.fn();
+    const client = {
+      ...api({
+        getReportForReview: vi.fn(async () => verifiedReview),
+        escalateVerifiedReport,
+      }),
+      broadcastAlert,
+      activateAlert,
+    };
     const view = render(<VerificationDashboard api={client} />);
     const dashboard = await selectReport(view.container, /flood/i);
+    expect(dashboard.queryByRole("link", { name: "Open Draft Alert" })).not.toBeInTheDocument();
 
     fireEvent.click(dashboard.getByRole("button", { name: "Escalate to Warning" }));
 
@@ -231,6 +254,20 @@ describe("VerificationDashboard", () => {
     expect(
       dashboard.queryByRole("button", { name: "Escalate to Warning" }),
     ).not.toBeInTheDocument();
+    const openDraftLink = dashboard.getByRole("link", { name: "Open Draft Alert" });
+    expect(openDraftLink).toHaveAttribute(
+      "href",
+      "/broadcast/alerts/70000000-0000-4000-8000-000000000001",
+    );
+    const preventNavigation = (event: MouseEvent) => event.preventDefault();
+    document.addEventListener("click", preventNavigation, true);
+    fireEvent.click(openDraftLink);
+    document.removeEventListener("click", preventNavigation, true);
+    expect(client.escalateVerifiedReport).toHaveBeenCalledTimes(1);
+    expect(client.decideReport).not.toHaveBeenCalled();
+    expect(broadcastAlert).not.toHaveBeenCalled();
+    expect(activateAlert).not.toHaveBeenCalled();
+    expect(dashboard.getByText("VERIFIED")).toBeInTheDocument();
   });
   it("prevents duplicate escalation while a request is pending", async () => {
     const pendingEscalation =
