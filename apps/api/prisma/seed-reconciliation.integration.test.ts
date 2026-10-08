@@ -408,7 +408,7 @@ describeIntegration("deterministic seed reconciliation against isolated PostgreS
     await createResettableAllocation();
     await prisma.rescueTeam.update({
       where: { id: seedIds.team },
-      data: { status: RescueTeamStatus.AVAILABLE },
+      data: { status: RescueTeamStatus.AVAILABLE, version: 1 },
     });
     await expect(verifySeed(prisma)).rejects.toThrow("seeded rescue team dispatch count");
   });
