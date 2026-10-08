@@ -90,6 +90,15 @@ export async function verifySeed(client: PrismaClient): Promise<Record<string, u
   assert(availableTeams >= 1, "expected at least one available rescue team");
   assert(checks.activePartner, "seeded partner must be active");
 
+  const team = await client.rescueTeam.findUnique({
+    where: { id: seedIds.team },
+    include: { dispatches: { select: { id: true } } },
+  });
+  assert(team, "seeded rescue team must exist");
+  assertEqual(team.status, RescueTeamStatus.AVAILABLE, "seeded rescue team status");
+  assertEqual(team.version, 1, "seeded rescue team version");
+  assertEqual(team.dispatches.length, 0, "seeded rescue team dispatch count");
+
   const reports = await client.hazardReport.findMany({
     where: { id: { in: [...deterministicReportIds] } },
     select: {
@@ -325,14 +334,6 @@ export async function verifySeed(client: PrismaClient): Promise<Record<string, u
     "resettable transport-dispatch count",
   );
 
-  const team = await client.rescueTeam.findUnique({
-    where: { id: seedIds.team },
-    include: { dispatches: { select: { id: true } } },
-  });
-  assert(team, "seeded rescue team must exist");
-  assertEqual(team.status, RescueTeamStatus.AVAILABLE, "seeded rescue team status");
-  assertEqual(team.version, 1, "seeded rescue team version");
-  assertEqual(team.dispatches.length, 0, "seeded rescue team dispatch count");
   assertEqual(partner?.active, true, "seeded partner active state");
 
   const shelter = await client.shelter.findUnique({ where: { id: seedIds.shelter } });
