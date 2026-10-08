@@ -9,7 +9,10 @@ describe("integrated officer web shell", () => {
   it("keeps the root DMC workspace and its officer areas", () => {
     render(<App initialPath="/" />);
 
-    expect(screen.getByText("DMC Duty Officer Workspace")).toBeInTheDocument();
+    expect(screen.getByRole("banner")).toBeInTheDocument();
+    expect(
+      screen.getByRole("navigation", { name: "Officer workspace navigation" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "DMC Duty Officer" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "District Officer" })).toBeInTheDocument();
   });

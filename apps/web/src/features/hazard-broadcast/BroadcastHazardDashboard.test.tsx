@@ -392,8 +392,8 @@ describe("App Navigation", () => {
     );
 
     // Navigation tabs exist
-    const verificationTab = screen.getByRole("button", { name: /hazard verification/i });
-    const broadcastTab = screen.getByRole("button", { name: /broadcast hazard alert/i });
+    const verificationTab = screen.getByRole("tab", { name: /hazard verification/i });
+    const broadcastTab = screen.getByRole("tab", { name: /broadcast alert/i });
 
     expect(verificationTab).toBeInTheDocument();
     expect(broadcastTab).toBeInTheDocument();

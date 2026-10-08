@@ -95,48 +95,220 @@ h3 {
 }
 
 .app-shell {
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
 }
 
-.dmc-shell {
-  width: min(1040px, calc(100% - 2rem));
+/* ================================================================
+   APP SHELL
+================================================================ */
+.app-main {
+  flex: 1;
+  width: min(1080px, calc(100% - 2rem));
   margin: 0 auto;
-  padding: 5rem 0;
+  padding: 2rem 0 4rem;
 }
 
-.dmc-header {
-  max-width: 760px;
+/* ================================================================
+   TOP NAVIGATION BAR
+================================================================ */
+.top-nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  width: 100%;
+  background: linear-gradient(135deg, #0e2e23 0%, #133828 55%, #0d2520 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 4px 24px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(12px);
 }
 
-.dmc-shell > .dmc-header .eyebrow {
-  margin: 0 0 0.75rem;
-  color: #22694f;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+.top-nav__inner {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  width: min(1080px, calc(100% - 2rem));
+  margin: 0 auto;
+  height: 3.75rem;
+}
+
+/* Brand / Logo section */
+.top-nav__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-shrink: 0;
+  margin-right: auto;
+}
+
+.top-nav__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  padding: 0.28rem 0.65rem;
+  border: 1px solid rgba(80, 220, 140, 0.35);
+  border-radius: 999px;
+  background: rgba(34, 180, 100, 0.1);
+  color: #5de09a;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.top-nav__pulse {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: #5de09a;
+  animation: pulse-dot 1.8s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.75);
+  }
+}
+
+.top-nav__titles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+  line-height: 1;
+}
+
+.top-nav__system {
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 
-.dmc-shell > .dmc-header h1 {
-  margin: 0;
-  font-size: clamp(2.25rem, 7vw, 4.6rem);
-  line-height: 1.02;
-  letter-spacing: -0.055em;
+.top-nav__name {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 22ch;
 }
 
-.dmc-shell > .dmc-header .lede {
-  margin-top: 1.25rem;
-  color: #466158;
-  font-size: 1.25rem;
+/* Navigation tabs */
+.top-nav__tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.3rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.07);
 }
 
-.dmc-shell .areas {
+.top-nav__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.5rem 1.1rem;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color 0.18s ease,
+    background 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+  white-space: nowrap;
+}
+
+.top-nav__tab:hover {
+  color: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.top-nav__tab.is-active {
+  color: #ffffff;
+  background: rgba(34, 105, 79, 0.75);
+  border-color: rgba(80, 200, 130, 0.3);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.1) inset,
+    0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.top-nav__tab-icon {
+  opacity: 0.75;
+  flex-shrink: 0;
+}
+
+.top-nav__tab.is-active .top-nav__tab-icon {
+  opacity: 1;
+}
+
+/* Operator meta chip */
+.top-nav__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+@media (max-width: 860px) {
+  .top-nav__meta {
+    display: none;
+  }
+
+  .top-nav__name {
+    max-width: 14ch;
+  }
+}
+
+@media (max-width: 480px) {
+  .top-nav__tab {
+    padding: 0.45rem 0.65rem;
+    font-size: 0.78rem;
+  }
+
+  .top-nav__titles {
+    display: none;
+  }
+}
+
+/* ================================================================
+   CONTENT AREAS (used when no feature loaded)
+================================================================ */
+.app-main .areas {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 1rem;
   margin: 3rem 0 1.5rem;
 }
 
-.dmc-shell .areas article {
+.app-main .areas article {
   min-height: 190px;
   padding: 1.5rem;
   border: 1px solid #c7d8d1;
@@ -145,11 +317,11 @@ h3 {
   box-shadow: 0 16px 40px rgb(27 66 52 / 8%);
 }
 
-.dmc-shell .areas article h2 {
+.app-main .areas article h2 {
   margin-top: 0;
 }
 
-.dmc-shell .areas article span {
+.app-main .areas article span {
   display: inline-block;
   margin-top: 1rem;
   color: #22694f;
@@ -1300,36 +1472,6 @@ dd {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-}
-
-/* Duty Officer Navigation Tabs */
-.officer-nav {
-  display: flex;
-  gap: 0.75rem;
-  margin-top: 1.5rem;
-}
-
-.nav-tab {
-  padding: 0.65rem 1.25rem;
-  border: 1px solid #c7d8d1;
-  border-radius: 999px;
-  background: #ffffff;
-  color: #22694f;
-  font-weight: 600;
-  font-size: 0.95rem;
-  cursor: pointer;
-  transition: all 0.15s ease-in-out;
-}
-
-.nav-tab:hover {
-  background: #e2ede8;
-}
-
-.nav-tab.active {
-  background: #22694f;
-  color: #ffffff;
-  border-color: #22694f;
-  box-shadow: 0 4px 12px rgba(34, 105, 79, 0.25);
 }
 
 /* Broadcast Dashboard Layout */
