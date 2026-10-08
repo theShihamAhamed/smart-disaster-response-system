@@ -14,8 +14,9 @@ import {
   VerificationResult,
   ZoneSeverity,
 } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import type { Prisma } from "@prisma/client";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export const seedIds = {
   district: "00000000-0000-4000-8000-000000000001",
@@ -44,10 +45,99 @@ export const seedIds = {
 } as const;
 
 const fixedTime = new Date("2026-09-25T10:00:00.000Z");
+const deterministicReportIds = [
+  seedIds.pendingReport,
+  seedIds.verifiedDraftReport,
+  seedIds.rejectedReport,
+  seedIds.verifiedActiveReport,
+] as const;
+const preservedAlertIds = [seedIds.draftAlert, seedIds.activeAlert] as const;
+const resettableReliefRequestIds = [seedIds.fullRequest, seedIds.partialRequest] as const;
+const resettableReliefRequestIdSet = new Set<string>(resettableReliefRequestIds);
 
-async function seed() {
+function deterministicSeedSafetyError(message: string): Error {
+  return new Error(`Deterministic seed safety error: ${message}`);
+}
+
+async function reconcileRuntimeAlerts(tx: Prisma.TransactionClient): Promise<void> {
+  const runtimeAlerts = await tx.alert.findMany({
+    where: {
+      sourceReportId: { in: [...deterministicReportIds] },
+      id: { notIn: [...preservedAlertIds] },
+    },
+    select: { id: true, parentAlertId: true },
+  });
+  const runtimeIds = new Set(runtimeAlerts.map(({ id }) => id));
+  const remaining = new Map(runtimeAlerts.map((alert) => [alert.id, alert] as const));
+  const deleteOrder: string[] = [];
+
+  while (remaining.size > 0) {
+    const leafIds = [...remaining.values()]
+      .filter((alert) => ![...remaining.values()].some((child) => child.parentAlertId === alert.id))
+      .map(({ id }) => id);
+    if (leafIds.length === 0) {
+      throw deterministicSeedSafetyError("runtime alert replacement chain is cyclic.");
+    }
+    for (const id of leafIds) {
+      deleteOrder.push(id);
+      remaining.delete(id);
+    }
+  }
+
+  if (runtimeIds.size > 0) {
+    await tx.notificationDelivery.deleteMany({ where: { alertId: { in: [...runtimeIds] } } });
+    await tx.broadcastAudit.deleteMany({ where: { alertId: { in: [...runtimeIds] } } });
+    await tx.alertTargetZone.deleteMany({ where: { alertId: { in: [...runtimeIds] } } });
+    for (const alertId of deleteOrder) {
+      await tx.alert.delete({ where: { id: alertId } });
+    }
+  }
+}
+
+async function reconcileSeededAlerts(tx: Prisma.TransactionClient): Promise<void> {
+  await reconcileRuntimeAlerts(tx);
+  await tx.notificationDelivery.deleteMany({ where: { alertId: { in: [...preservedAlertIds] } } });
+  await tx.broadcastAudit.deleteMany({ where: { alertId: { in: [...preservedAlertIds] } } });
+  await tx.alertTargetZone.deleteMany({ where: { alertId: { in: [...preservedAlertIds] } } });
+}
+
+async function reconcileSeededRelief(tx: Prisma.TransactionClient): Promise<void> {
+  const allocations = await tx.resourceAllocation.findMany({
+    where: { requestId: { in: [...resettableReliefRequestIds] } },
+    select: { id: true },
+  });
+  const allocationIds = allocations.map(({ id }) => id);
+  const teamDispatches = await tx.transportDispatch.findMany({
+    where: { rescueTeamId: seedIds.team },
+    select: { allocation: { select: { requestId: true } } },
+  });
+  const foreignDispatch = teamDispatches.find(
+    ({ allocation }) => !resettableReliefRequestIdSet.has(allocation.requestId),
+  );
+  if (foreignDispatch) {
+    throw deterministicSeedSafetyError(
+      "seeded rescue team has a dispatch for a non-resettable relief request.",
+    );
+  }
+
+  if (allocationIds.length > 0) {
+    await tx.transportDispatch.deleteMany({ where: { allocationId: { in: allocationIds } } });
+    await tx.distributionLog.deleteMany({ where: { allocationId: { in: allocationIds } } });
+    await tx.allocationItem.deleteMany({ where: { allocationId: { in: allocationIds } } });
+    await tx.resourceAllocation.deleteMany({ where: { id: { in: allocationIds } } });
+  }
+  await tx.partnerResupplyRequest.deleteMany({
+    where: { reliefRequestId: { in: [...resettableReliefRequestIds] } },
+  });
+}
+
+export async function seed(prisma: PrismaClient): Promise<void> {
   await prisma.$transaction(
     async (tx) => {
+      await reconcileSeededAlerts(tx);
+      await tx.verificationDecision.deleteMany({ where: { reportId: seedIds.pendingReport } });
+      await reconcileSeededRelief(tx);
+
       const users = [
         {
           id: seedIds.citizen,
@@ -253,7 +343,20 @@ async function seed() {
 
       await tx.alert.upsert({
         where: { id: seedIds.draftAlert },
-        update: {},
+        update: {
+          sourceReportId: seedIds.verifiedDraftReport,
+          createdByOfficerId: seedIds.broadcaster,
+          hazardType: HazardType.LANDSLIDE,
+          severity: AlertSeverity.WARNING,
+          message: "Draft landslide warning for review.",
+          safetyInstructions: "Avoid the hillside road and await official instructions.",
+          status: AlertStatus.DRAFT,
+          version: 1,
+          parentAlertId: null,
+          issuedAt: null,
+          cancelledAt: null,
+          cancellationReason: null,
+        },
         create: {
           id: seedIds.draftAlert,
           sourceReportId: seedIds.verifiedDraftReport,
@@ -268,7 +371,20 @@ async function seed() {
       });
       await tx.alert.upsert({
         where: { id: seedIds.activeAlert },
-        update: {},
+        update: {
+          sourceReportId: seedIds.verifiedActiveReport,
+          createdByOfficerId: seedIds.broadcaster,
+          hazardType: HazardType.CYCLONE,
+          severity: AlertSeverity.EVACUATION,
+          message: "Cyclone warning is active for the coastal target zone.",
+          safetyInstructions: "Move to the nearest designated shelter immediately.",
+          status: AlertStatus.ACTIVE,
+          version: 1,
+          parentAlertId: null,
+          issuedAt: fixedTime,
+          cancelledAt: null,
+          cancellationReason: null,
+        },
         create: {
           id: seedIds.activeAlert,
           sourceReportId: seedIds.verifiedActiveReport,
@@ -294,7 +410,14 @@ async function seed() {
       });
       await tx.notificationDelivery.upsert({
         where: { id: "51000000-0000-4000-8000-000000000001" },
-        update: {},
+        update: {
+          alertId: seedIds.activeAlert,
+          recipientRef: "seed-recipient-001",
+          status: DeliveryStatus.PUSH_SENT,
+          attemptNo: 1,
+          lastFailureReason: null,
+          updatedAt: fixedTime,
+        },
         create: {
           id: "51000000-0000-4000-8000-000000000001",
           alertId: seedIds.activeAlert,
@@ -306,7 +429,13 @@ async function seed() {
       });
       await tx.broadcastAudit.upsert({
         where: { id: "52000000-0000-4000-8000-000000000001" },
-        update: {},
+        update: {
+          alertId: seedIds.activeAlert,
+          officerId: seedIds.broadcaster,
+          action: "ACTIVATED",
+          reason: null,
+          createdAt: fixedTime,
+        },
         create: {
           id: "52000000-0000-4000-8000-000000000001",
           alertId: seedIds.activeAlert,
@@ -318,7 +447,13 @@ async function seed() {
 
       await tx.shelter.upsert({
         where: { id: seedIds.shelter },
-        update: {},
+        update: {
+          name: "Colombo Central Shelter",
+          districtId: seedIds.district,
+          locationId: seedIds.shelterLocation,
+          capacity: 250,
+          currentOccupancy: 180,
+        },
         create: {
           id: seedIds.shelter,
           name: "Colombo Central Shelter",
@@ -428,7 +563,12 @@ async function seed() {
       }
       await tx.partnerOrganisation.upsert({
         where: { id: seedIds.partner },
-        update: {},
+        update: {
+          districtId: seedIds.district,
+          name: "Demo Relief NGO",
+          type: PartnerOrganisationType.NGO,
+          active: true,
+        },
         create: {
           id: seedIds.partner,
           districtId: seedIds.district,
@@ -439,7 +579,13 @@ async function seed() {
       });
       await tx.rescueTeam.upsert({
         where: { id: seedIds.team },
-        update: {},
+        update: {
+          districtId: seedIds.district,
+          name: "Colombo Rescue Team A",
+          status: RescueTeamStatus.AVAILABLE,
+          locationId: seedIds.teamLocation,
+          version: 1,
+        },
         create: {
           id: seedIds.team,
           districtId: seedIds.district,
@@ -457,6 +603,19 @@ async function seed() {
   );
 }
 
-seed()
-  .then(() => console.log("Deterministic Phase 1 seed completed."))
-  .finally(async () => prisma.$disconnect());
+async function main(): Promise<void> {
+  const prisma = new PrismaClient();
+  try {
+    await seed(prisma);
+    console.log("Deterministic Phase 1 seed completed.");
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error: unknown) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}
