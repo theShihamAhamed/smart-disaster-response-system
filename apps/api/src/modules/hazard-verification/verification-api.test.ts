@@ -83,23 +83,34 @@ const users: Readonly<Record<string, DevelopmentAuthUser>> = {
 
 class VerificationApiRepository implements HazardVerificationRepository {
   public commands: DecisionCommand[] = [];
-  public constructor(private status: ReportStatus | undefined = ReportStatus.PENDING) {}
+  public constructor(
+    private status: ReportStatus | undefined = ReportStatus.PENDING,
+    private readonly existingDecisionStatus?: ReportStatus.VERIFIED | ReportStatus.REJECTED,
+  ) {}
+
+  private currentStatus(): ReportStatus | undefined {
+    return this.existingDecisionStatus ?? this.status;
+  }
 
   public statusForReport(id: string): ReportStatus | null {
-    return id === reportId ? (this.status ?? null) : null;
+    return id === reportId ? (this.currentStatus() ?? null) : null;
   }
 
   public async listPendingReports(): Promise<readonly PendingReport[]> {
-    return this.status === ReportStatus.PENDING ? [pendingReport] : [];
+    return this.currentStatus() === ReportStatus.PENDING ? [pendingReport] : [];
   }
 
   public async findReportForReview(id: string): Promise<ReportForReview | null> {
-    return id === reportId && this.status ? { ...reviewReport, status: this.status } : null;
+    const status = this.currentStatus();
+    return id === reportId && status ? { ...reviewReport, status } : null;
   }
 
   public async decidePendingReport(command: DecisionCommand): Promise<DecisionPersistenceResult> {
     if (command.reportId !== reportId) return { kind: "REPORT_NOT_FOUND" };
     if (!this.status) return { kind: "REPORT_NOT_FOUND" };
+    if (this.existingDecisionStatus) {
+      return { kind: "REPORT_ALREADY_PROCESSED", status: this.existingDecisionStatus };
+    }
     if (this.status !== ReportStatus.PENDING) {
       return { kind: "REPORT_ALREADY_PROCESSED", status: this.status };
     }
@@ -459,6 +470,26 @@ describe("verification API", () => {
       code: "REPORT_ALREADY_PROCESSED",
       details: { status: ReportStatus.VERIFIED },
     });
+    expect(JSON.stringify(response.body)).not.toMatch(/P2002|23505|prisma|database/i);
+  });
+
+  it("maps a stale pending report with an existing decision to the frozen conflict envelope", async () => {
+    const repository = new VerificationApiRepository(ReportStatus.PENDING, ReportStatus.REJECTED);
+    const { app } = createVerificationApp(repository);
+    const response = await officerRequest(app)
+      .post(`/api/v1/verification/reports/${reportId}/decision`)
+      .set("Idempotency-Key", commandKey)
+      .send({ result: VerificationResult.VERIFIED });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error).toEqual({
+      code: "REPORT_ALREADY_PROCESSED",
+      message: "The report has already been processed.",
+      fieldErrors: {},
+      details: { status: ReportStatus.REJECTED },
+    });
+    expect(repository.commands).toHaveLength(0);
+    expect(JSON.stringify(response.body)).not.toMatch(/P2002|23505|prisma|database/i);
   });
 
   it("rejects missing, invalid, and wrong-role development identities", async () => {
