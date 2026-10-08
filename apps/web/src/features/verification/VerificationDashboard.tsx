@@ -154,7 +154,19 @@ export function VerificationDashboard({ api }: { readonly api: VerificationApi }
         typeof error === "object" && error !== null && "status" in error
           ? (error as { status: number }).status
           : 0;
-      if (status === 409) {
+      const code =
+        typeof error === "object" &&
+        error !== null &&
+        "body" in error &&
+        typeof error.body === "object" &&
+        error.body !== null &&
+        "error" in error.body &&
+        typeof error.body.error === "object" &&
+        error.body.error !== null &&
+        "code" in error.body.error
+          ? error.body.error.code
+          : undefined;
+      if (status === 409 && code === "REPORT_ALREADY_PROCESSED") {
         setDecisionError("This report has already been processed.");
         setDecisionLocked(true);
         setConflictReviewError(false);
