@@ -111,7 +111,7 @@ export class ReportSyncService {
   }
 
   private async send(clientReportId: string): Promise<SendOutcome> {
-    const { api, repository } = this.deps;
+    const { api, repository, photos } = this.deps;
     const report = await repository.get(clientReportId);
 
     if (report === null) {
@@ -123,7 +123,12 @@ export class ReportSyncService {
 
     let response;
     try {
-      response = await api.submit(report.payload, report.clientReportId);
+      let payload = report.payload;
+      if (report.localPhotoUri !== null && report.payload.photoRef === report.localPhotoUri) {
+        const photoRef = await photos.upload(report.localPhotoUri, report.clientReportId);
+        payload = { ...report.payload, photoRef };
+      }
+      response = await api.submit(payload, report.clientReportId);
     } catch (error) {
       const refusal = refusalOf(error);
       if (refusal) {

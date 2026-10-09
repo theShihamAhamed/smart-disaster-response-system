@@ -20,6 +20,13 @@ export class PhotoRepository {
     }
   }
 
+  public async upload(localUri: string, clientReportId: string): Promise<string> {
+    if (!this.storage.upload) {
+      return localUri;
+    }
+    return this.storage.upload(localUri, clientReportId);
+  }
+
   /** Best effort: a leftover file is harmless, so this never throws. */
   public async discard(localUri: string): Promise<void> {
     try {

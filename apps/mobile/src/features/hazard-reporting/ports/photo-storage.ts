@@ -8,5 +8,7 @@ export interface PersistedPhoto {
 /** Port: keeps a permanent copy of the photo so it survives app restarts. */
 export interface PhotoStorage {
   persist(sourceUri: string, clientReportId: string): Promise<PersistedPhoto>;
+  /** Uploads an existing local copy and returns the server reference. */
+  upload?(localUri: string, clientReportId: string): Promise<string>;
   remove(localUri: string): Promise<void>;
 }
