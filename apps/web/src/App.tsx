@@ -1,5 +1,5 @@
 import { PROJECT_NAME } from "@disaster/config";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 
 import { BroadcastHazardDashboard } from "./features/hazard-broadcast/BroadcastHazardDashboard";
 import type { BroadcastApi } from "./features/hazard-broadcast/broadcast-api";
@@ -24,135 +24,119 @@ const officerAreas = [
 export interface AppProps extends ReliefAllocationFeatureProps {
   readonly verificationApi?: VerificationApi | undefined;
   readonly broadcastApi?: BroadcastApi | undefined;
-  readonly initialView?: "verification" | "broadcast";
 }
+
+type AppModule = "verification" | "broadcast" | "relief";
+
+function normalizePath(pathname: string): string {
+  return pathname.replace(/\/+$/, "") || "/";
+}
+
+function resolveModule(pathname: string): AppModule {
+  if (pathname === "/broadcast") return "broadcast";
+  if (pathname === "/relief" || pathname.startsWith("/relief/")) return "relief";
+  return "verification";
+}
+
+const navigationItems = [
+  { module: "verification", href: "/", label: "Hazard Verification", role: "DMC Duty Officer" },
+  {
+    module: "broadcast",
+    href: "/broadcast",
+    label: "Broadcast Alert",
+    role: "DMC Duty Officer with broadcast permission",
+  },
+  {
+    module: "relief",
+    href: "/relief",
+    label: "Resource Allocation",
+    role: "District Officer",
+  },
+] as const;
 
 export function App({
   verificationApi,
   broadcastApi,
-  initialView = "verification",
   api,
   initialPath,
   createIdempotencyKey,
 }: AppProps) {
-  const [currentView, setCurrentView] = useState<"verification" | "broadcast">(initialView);
-  const [browserPath, setBrowserPath] = useState(() => window.location.pathname);
-  const path = initialPath ?? browserPath;
-  const normalizedPath = path.replace(/\/+$/, "") || "/";
-  const isReliefPath = normalizedPath === "/relief" || normalizedPath.startsWith("/relief/");
+  const [path, setPath] = useState(() => normalizePath(initialPath ?? window.location.pathname));
+  const currentModule = resolveModule(path);
 
   useEffect(() => {
     if (initialPath !== undefined) return;
-    const onPopState = () => setBrowserPath(window.location.pathname);
+    const onPopState = () => setPath(normalizePath(window.location.pathname));
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, [initialPath]);
 
-  if (isReliefPath) {
-    return (
-      <ReliefAllocationFeature
-        {...(api === undefined ? {} : { api })}
-        {...(initialPath === undefined ? {} : { initialPath })}
-        {...(createIdempotencyKey === undefined ? {} : { createIdempotencyKey })}
-      />
-    );
+  useEffect(() => {
+    if (initialPath !== undefined) setPath(normalizePath(initialPath));
+  }, [initialPath]);
+
+  function navigate(nextPath: string) {
+    const normalized = normalizePath(nextPath);
+    if (initialPath === undefined && normalizePath(window.location.pathname) !== normalized) {
+      window.history.pushState({}, "", normalized);
+    }
+    setPath(normalized);
   }
 
+  function navigateFromLink(event: MouseEvent<HTMLAnchorElement>, nextPath: string) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+    event.preventDefault();
+    navigate(nextPath);
+  }
+
+  const requiredRole = navigationItems.find(({ module }) => module === currentModule)?.role;
+
   return (
-    <div className="app-shell">
-      {/* Top Navigation Bar */}
-      <header className="top-nav" role="banner">
-        <div className="top-nav__inner">
-          <div className="top-nav__brand">
-            <span className="top-nav__badge" aria-label="System status active">
-              <span className="top-nav__pulse" aria-hidden="true" />
-              LIVE
-            </span>
-            <div className="top-nav__titles">
-              <span className="top-nav__system">SE3070 · Assignment 02</span>
-              <span className="top-nav__name">{PROJECT_NAME}</span>
+    <div className="dmc-shell">
+      <a className="skip-link" href="#main-content">
+        Skip to main content
+      </a>
+      <header className="dmc-header" role="banner">
+        <div className="dmc-header__inner">
+          <div className="dmc-brand">
+            <div className="dmc-brand__copy">
+              <strong className="dmc-brand__system">DMC Sri Lanka</strong>
+              <span className="dmc-brand__name">{PROJECT_NAME}</span>
             </div>
           </div>
 
-          <nav className="top-nav__tabs" aria-label="Officer workspace navigation">
-            <button
-              id="nav-verification"
-              type="button"
-              role="tab"
-              aria-selected={currentView === "verification"}
-              className={`top-nav__tab ${currentView === "verification" ? "is-active" : ""}`}
-              onClick={() => setCurrentView("verification")}
-            >
-              <svg
-                className="top-nav__tab-icon"
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
+          <nav className="dmc-nav" aria-label="Officer workspace navigation">
+            {navigationItems.map((item) => (
+              <a
+                key={item.module}
+                className={`dmc-nav__item ${currentModule === item.module ? "is-active" : ""}`}
+                href={item.href}
+                aria-current={currentModule === item.module ? "page" : undefined}
+                onClick={(event) => navigateFromLink(event, item.href)}
               >
-                <path d="M9 12l2 2 4-4" />
-                <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c1.51 0 2.93.37 4.18 1.03" />
-              </svg>
-              Hazard Verification
-            </button>
-            <button
-              id="nav-broadcast"
-              type="button"
-              role="tab"
-              aria-selected={currentView === "broadcast"}
-              className={`top-nav__tab ${currentView === "broadcast" ? "is-active" : ""}`}
-              onClick={() => setCurrentView("broadcast")}
-            >
-              <svg
-                className="top-nav__tab-icon"
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M2 20h.01" />
-                <path d="M7 20v-4" />
-                <path d="M12 20v-8" />
-                <path d="M17 20V8" />
-                <path d="M22 4v16" />
-              </svg>
-              Broadcast Alert
-            </button>
+                <span>{item.label}</span>
+                <small>{item.role}</small>
+              </a>
+            ))}
           </nav>
 
-          <div className="top-nav__meta" aria-label="Operator context">
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
-            DMC Duty Officer
+          <div className="dmc-role" aria-label="Required workspace role">
+            <span aria-hidden="true">ROLE</span>
+            <div>
+              <small>Required workspace role</small>
+              <strong>{requiredRole}</strong>
+            </div>
           </div>
         </div>
       </header>
 
-      {/* Page Content */}
-      <main className="app-main">
-        {currentView === "verification" ? (
+      <main
+        className={`app-main ${currentModule === "relief" ? "app-main--relief" : ""}`}
+        id="main-content"
+      >
+        {currentModule === "verification" ? (
           verificationApi ? (
             <VerificationDashboard api={verificationApi} />
           ) : (
@@ -166,8 +150,15 @@ export function App({
               ))}
             </section>
           )
-        ) : (
+        ) : currentModule === "broadcast" ? (
           <BroadcastHazardDashboard api={broadcastApi} />
+        ) : (
+          <ReliefAllocationFeature
+            {...(api === undefined ? {} : { api })}
+            initialPath={path}
+            navigate={navigate}
+            {...(createIdempotencyKey === undefined ? {} : { createIdempotencyKey })}
+          />
         )}
       </main>
     </div>
