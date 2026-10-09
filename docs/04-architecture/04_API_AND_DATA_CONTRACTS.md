@@ -29,6 +29,25 @@ Error envelope:
 
 The server never trusts a client-provided role, owner, final status, available stock, outstanding quantity, recipient count or derived request state.
 
+### Development/demo authentication
+
+The assignment uses `X-Dev-User-Id: <seeded-user-uuid>` as a development/demo identity convention, not as production authentication. The header identifies only a user. The API loads that user and the required role profile from PostgreSQL, then derives the trusted role, volunteer assigned area, DMC broadcast permission or District Officer district scope in `response.locals.auth`. Feature modules must use that server-derived context and must never accept role, district or permissions from request payloads or headers.
+
+The development header is enabled only when `DEV_AUTH_ENABLED=true`; `false`, a missing value or any other value leaves it disabled. This explicit flag permits a controlled assignment demonstration even when a hosting provider sets `NODE_ENV=production`. Production login, registration, password handling, sessions, JWT issuance, refresh tokens and OAuth are outside the assignment scope.
+
+The officer web app reads `VITE_API_BASE_URL` and the optional development/demo UUID `VITE_DEV_USER_ID` from Vite's browser-visible environment. Its shared API client sends that UUID only as `X-Dev-User-Id`; it never sends a role, district or broadcast permission. The API must also have `DEV_AUTH_ENABLED=true` to accept the header. The mobile app continues to use `EXPO_PUBLIC_API_BASE_URL` and is otherwise unaffected by this web convention.
+
+The API permits browser access only from the exact origin configured by `WEB_ORIGIN`. Its central CORS policy allows `GET`, `POST`, `PATCH` and `OPTIONS` requests with JSON, `Idempotency-Key` and `X-Dev-User-Id` headers. A missing `WEB_ORIGIN` grants no browser origin, and deployed environments configure their frontend origin without source-code changes.
+
+Officer feature modules use the shared API client for `GET`, `POST` and `PATCH` calls rather than ad hoc `fetch` configuration. Mutation calls provide typed JSON through `body` and retry-sensitive operations add an `Idempotency-Key` per request; the shared web client retains its configured `X-Dev-User-Id` automatically.
+
+```ts
+await sharedApiClient.post<ResponsePayload, RequestPayload>("/resources", {
+  body: requestPayload,
+  headers: { "Idempotency-Key": idempotencyKey },
+});
+```
+
 ## Submit Citizen Hazard Report
 
 ### `POST /hazard-reports`
@@ -174,8 +193,8 @@ Header: `Idempotency-Key: <allocation-command-uuid>`
 {
   "requestVersion": 4,
   "items": [
-    { "requestItemId": "uuid", "quantity": 100 },
-    { "requestItemId": "uuid", "quantity": 8 }
+    { "requestItemId": "uuid", "allocateQty": 100 },
+    { "requestItemId": "uuid", "allocateQty": 8 }
   ],
   "shortages": [
     {
@@ -188,7 +207,9 @@ Header: `Idempotency-Key: <allocation-command-uuid>`
 }
 ```
 
-The client sends partner selections, not trusted shortage quantities. The server recalculates every shortage after re-reading stock and outstanding demand.
+The client sends partner selections, not trusted shortage quantities. The server recalculates every shortage after re-reading stock and outstanding demand. Idempotency is scoped by the trusted officer ID plus the `Idempotency-Key`; `requestVersion` is an optimistic-concurrency precondition and is excluded from canonical business-intent comparison.
+
+The operation commits stock deductions, allocation evidence, partner resupply, request state/version and optional rescue dispatch in one Serializable PostgreSQL transaction. Transient transaction conflicts are retried no more than twice after the original attempt; typed business conflicts are never retried.
 
 Response `201`, or `200` for an idempotent repeat:
 
@@ -224,7 +245,7 @@ Stable conflict codes:
 
 ### `GET /allocations/by-idempotency-key/{key}`
 
-Returns the officer's committed allocation receipt after an uncertain network result. It must not expose another officer's commands.
+Returns the authenticated District Officer's authoritative committed allocation receipt after an uncertain network result. Lookup is scoped by trusted `officerId` plus the UUID idempotency key; a missing key or a key owned by another officer returns `404` without disclosure. Receipt reconstruction uses persisted allocation items, resupply records correlated by the exact command commit timestamp and unique request supply item, optional dispatch data and the persisted request state. This recovery operation is read-only.
 
 ## Database constraints
 
@@ -264,4 +285,3 @@ Foreign keys must prevent orphaned decisions, alerts, allocations, distribution 
 | Allocate resources | No | No | No | Yes, own district |
 
 Authentication mechanics may be simple for the assignment, but authorization checks must exist in the API and have unit tests.
-

@@ -23,6 +23,8 @@ Deliverables:
 - pull-request template and contribution rules;
 - copied design-freeze pack under `docs/design-freeze`.
 
+The preferred team development database is PostgreSQL hosted by Neon. GitHub Actions continues to use its own temporary PostgreSQL service, while Docker PostgreSQL is an optional local fallback. Database credentials remain outside Git, and destructive work must use an isolated database or Neon branch.
+
 Exit gate:
 
 ```text
@@ -183,4 +185,3 @@ Work backward from the 9 October 2026 deadline:
 - stop accepting non-essential changes once evidence capture begins.
 
 Exact dates may be assigned by the team, but the order and exit gates above are fixed.
-

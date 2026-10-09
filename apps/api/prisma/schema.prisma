@@ -3,8 +3,284 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
+
+model User {
+  id              String           @id @db.Uuid
+  name            String
+  contactNo       String
+  role            UserRole
+  districtOfficer DistrictOfficer?
+  dmcOfficer      DmcOfficer?
+  hazardReports   HazardReport[]
+  volunteer       Volunteer?
+}
+
+model Volunteer {
+  userId         String @id @db.Uuid
+  assignedAreaId String @db.Uuid
+  user           User   @relation(fields: [userId], references: [id])
+}
+
+model DmcOfficer {
+  userId                String                 @id @db.Uuid
+  dutyStation           String
+  canBroadcast          Boolean
+  createdAlerts         Alert[]
+  broadcastAudits       BroadcastAudit[]
+  user                  User                   @relation(fields: [userId], references: [id])
+  verificationDecisions VerificationDecision[]
+}
+
+model DistrictOfficer {
+  userId      String               @id @db.Uuid
+  districtId  String               @db.Uuid
+  user        User                 @relation(fields: [userId], references: [id])
+  allocations ResourceAllocation[]
+}
+
+model Location {
+  id                    String              @id @db.Uuid
+  latitude              Decimal             @db.Decimal(9, 6)
+  longitude             Decimal             @db.Decimal(9, 6)
+  districtId            String              @db.Uuid
+  address               String?
+  source                LocationSource
+  hazardReports         HazardReport[]
+  rescueTeams           RescueTeam[]
+  shelters              Shelter[]
+  transportDestinations TransportDispatch[]
+}
+
+model TargetZone {
+  id             String            @id @db.Uuid
+  name           String
+  districtId     String            @db.Uuid
+  severity       ZoneSeverity
+  geometryRef    String
+  alertLinks     AlertTargetZone[]
+  reliefRequests ReliefRequest[]
+}
+
+model HazardReport {
+  id                   String                @id @db.Uuid
+  clientReportId       String                @unique @db.Uuid
+  reporterId           String                @db.Uuid
+  hazardType           HazardType
+  description          String
+  photoRef             String
+  locationId           String                @db.Uuid
+  submittedAt          DateTime              @db.Timestamptz(3)
+  status               ReportStatus
+  outsideAssignedArea  Boolean
+  requiresExtraReview  Boolean
+  alerts               Alert[]
+  location             Location              @relation(fields: [locationId], references: [id])
+  reporter             User                  @relation(fields: [reporterId], references: [id])
+  verificationDecision VerificationDecision?
+}
+
+model VerificationDecision {
+  id        String             @id @db.Uuid
+  reportId  String             @unique @db.Uuid
+  officerId String             @db.Uuid
+  result    VerificationResult
+  reason    String?
+  decidedAt DateTime           @db.Timestamptz(3)
+  officer   DmcOfficer         @relation(fields: [officerId], references: [userId])
+  report    HazardReport       @relation(fields: [reportId], references: [id])
+}
+
+model Alert {
+  id                 String                 @id @db.Uuid
+  sourceReportId     String                 @db.Uuid
+  createdByOfficerId String                 @db.Uuid
+  hazardType         HazardType
+  severity           AlertSeverity
+  message            String
+  safetyInstructions String
+  status             AlertStatus
+  version            Int
+  parentAlertId      String?                @db.Uuid
+  issuedAt           DateTime?              @db.Timestamptz(3)
+  cancelledAt        DateTime?              @db.Timestamptz(3)
+  cancellationReason String?
+  createdByOfficer   DmcOfficer             @relation(fields: [createdByOfficerId], references: [userId])
+  parentAlert        Alert?                 @relation("AlertVersions", fields: [parentAlertId], references: [id], onDelete: Restrict)
+  replacementAlerts  Alert[]                @relation("AlertVersions")
+  sourceReport       HazardReport           @relation(fields: [sourceReportId], references: [id])
+  targetZones        AlertTargetZone[]
+  audits             BroadcastAudit[]
+  deliveries         NotificationDelivery[]
+
+  @@index([sourceReportId])
+  @@index([parentAlertId])
+}
+
+model AlertTargetZone {
+  alertId      String     @db.Uuid
+  targetZoneId String     @db.Uuid
+  alert        Alert      @relation(fields: [alertId], references: [id])
+  targetZone   TargetZone @relation(fields: [targetZoneId], references: [id])
+
+  @@id([alertId, targetZoneId])
+}
+
+model NotificationDelivery {
+  id                String         @id @db.Uuid
+  alertId           String         @db.Uuid
+  recipientRef      String
+  status            DeliveryStatus
+  attemptNo         Int
+  lastFailureReason String?
+  updatedAt         DateTime       @db.Timestamptz(3)
+  alert             Alert          @relation(fields: [alertId], references: [id])
+}
+
+model BroadcastAudit {
+  id        String     @id @db.Uuid
+  alertId   String     @db.Uuid
+  officerId String     @db.Uuid
+  action    String
+  reason    String?
+  createdAt DateTime   @db.Timestamptz(3)
+  alert     Alert      @relation(fields: [alertId], references: [id])
+  officer   DmcOfficer @relation(fields: [officerId], references: [userId])
+}
+
+model Shelter {
+  id               String          @id @db.Uuid
+  name             String
+  districtId       String          @db.Uuid
+  locationId       String          @db.Uuid
+  capacity         Int
+  currentOccupancy Int
+  reliefRequests   ReliefRequest[]
+  location         Location        @relation(fields: [locationId], references: [id])
+}
+
+model ReliefRequest {
+  id               String                   @id @db.Uuid
+  shelterId        String                   @db.Uuid
+  targetZoneId     String                   @db.Uuid
+  status           ReliefRequestStatus
+  priorityNote     String?
+  createdAt        DateTime                 @db.Timestamptz(3)
+  version          Int
+  resupplyRequests PartnerResupplyRequest[]
+  shelter          Shelter                  @relation(fields: [shelterId], references: [id])
+  targetZone       TargetZone               @relation(fields: [targetZoneId], references: [id])
+  items            ReliefRequestItem[]
+  allocations      ResourceAllocation[]
+}
+
+model ReliefRequestItem {
+  id              String           @id @db.Uuid
+  requestId       String           @db.Uuid
+  supplyType      SupplyType
+  requestedQty    Int
+  allocationItems AllocationItem[]
+  request         ReliefRequest    @relation(fields: [requestId], references: [id])
+
+  @@unique([requestId, supplyType])
+}
+
+model WarehouseStock {
+  id           String     @id @db.Uuid
+  districtId   String     @db.Uuid
+  supplyType   SupplyType
+  availableQty Int
+  version      Int
+  syncedAt     DateTime   @db.Timestamptz(3)
+
+  @@unique([districtId, supplyType])
+}
+
+model ResourceAllocation {
+  id               String             @id @db.Uuid
+  requestId        String             @db.Uuid
+  officerId        String             @db.Uuid
+  idempotencyKey   String             @db.Uuid
+  notes            String?
+  createdAt        DateTime           @db.Timestamptz(3)
+  items            AllocationItem[]
+  distributionLogs DistributionLog[]
+  officer          DistrictOfficer    @relation(fields: [officerId], references: [userId])
+  request          ReliefRequest      @relation(fields: [requestId], references: [id])
+  dispatch         TransportDispatch?
+
+  @@unique([officerId, idempotencyKey])
+}
+
+model AllocationItem {
+  id              String             @id @db.Uuid
+  allocationId    String             @db.Uuid
+  requestItemId   String             @db.Uuid
+  supplyType      SupplyType
+  allocatedQty    Int
+  allocation      ResourceAllocation @relation(fields: [allocationId], references: [id])
+  requestItem     ReliefRequestItem  @relation(fields: [requestItemId], references: [id])
+  distributionLog DistributionLog?
+}
+
+model DistributionLog {
+  id               String             @id @db.Uuid
+  allocationId     String             @db.Uuid
+  allocationItemId String             @unique @db.Uuid
+  districtId       String             @db.Uuid
+  supplyType       SupplyType
+  quantity         Int
+  createdAt        DateTime           @db.Timestamptz(3)
+  allocation       ResourceAllocation @relation(fields: [allocationId], references: [id])
+  allocationItem   AllocationItem     @relation(fields: [allocationItemId], references: [id])
+}
+
+model PartnerOrganisation {
+  id               String                   @id @db.Uuid
+  districtId       String                   @db.Uuid
+  name             String
+  type             PartnerOrganisationType
+  active           Boolean
+  resupplyRequests PartnerResupplyRequest[]
+}
+
+model PartnerResupplyRequest {
+  id                    String                @id @db.Uuid
+  reliefRequestId       String                @db.Uuid
+  partnerOrganisationId String                @db.Uuid
+  supplyType            SupplyType
+  requestedQty          Int
+  status                PartnerResupplyStatus
+  createdAt             DateTime              @db.Timestamptz(3)
+  partnerOrganisation   PartnerOrganisation   @relation(fields: [partnerOrganisationId], references: [id])
+  reliefRequest         ReliefRequest         @relation(fields: [reliefRequestId], references: [id])
+
+  @@index([reliefRequestId, partnerOrganisationId, supplyType, status])
+}
+
+model RescueTeam {
+  id         String              @id @db.Uuid
+  districtId String              @db.Uuid
+  name       String
+  status     RescueTeamStatus
+  locationId String              @db.Uuid
+  version    Int
+  location   Location            @relation(fields: [locationId], references: [id])
+  dispatches TransportDispatch[]
+}
+
+model TransportDispatch {
+  id                    String             @id @db.Uuid
+  allocationId          String             @unique @db.Uuid
+  rescueTeamId          String             @db.Uuid
+  destinationLocationId String             @db.Uuid
+  dispatchedAt          DateTime           @db.Timestamptz(3)
+  allocation            ResourceAllocation @relation(fields: [allocationId], references: [id])
+  destinationLocation   Location           @relation(fields: [destinationLocationId], references: [id])
+  rescueTeam            RescueTeam         @relation(fields: [rescueTeamId], references: [id])
 }
 
 enum UserRole {
@@ -97,279 +373,4 @@ enum PartnerResupplyStatus {
   ACKNOWLEDGED
   FULFILLED
   CANCELLED
-}
-
-model User {
-  id              String           @id @db.Uuid
-  name            String
-  contactNo       String
-  role            UserRole
-  volunteer       Volunteer?
-  dmcOfficer      DmcOfficer?
-  districtOfficer DistrictOfficer?
-  hazardReports   HazardReport[]
-}
-
-model Volunteer {
-  userId         String @id @db.Uuid
-  assignedAreaId String @db.Uuid
-  user           User   @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-}
-
-model DmcOfficer {
-  userId                String                 @id @db.Uuid
-  dutyStation           String
-  canBroadcast          Boolean
-  user                   User                   @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  verificationDecisions VerificationDecision[]
-  createdAlerts          Alert[]
-  broadcastAudits        BroadcastAudit[]
-}
-
-model DistrictOfficer {
-  userId      String               @id @db.Uuid
-  districtId  String               @db.Uuid
-  user        User                 @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  allocations ResourceAllocation[]
-}
-
-model Location {
-  id                    String              @id @db.Uuid
-  latitude              Decimal             @db.Decimal(9, 6)
-  longitude             Decimal             @db.Decimal(9, 6)
-  districtId            String              @db.Uuid
-  address               String?
-  source                LocationSource
-  hazardReports         HazardReport[]
-  shelters              Shelter[]
-  rescueTeams           RescueTeam[]
-  transportDestinations TransportDispatch[]
-}
-
-model TargetZone {
-  id            String            @id @db.Uuid
-  name          String
-  districtId    String            @db.Uuid
-  severity      ZoneSeverity
-  geometryRef   String
-  alertLinks    AlertTargetZone[]
-  reliefRequests ReliefRequest[]
-}
-
-model HazardReport {
-  id                  String                 @id @db.Uuid
-  clientReportId      String                 @unique @db.Uuid
-  reporterId          String                 @db.Uuid
-  hazardType          HazardType
-  description         String
-  photoRef            String
-  locationId          String                 @db.Uuid
-  submittedAt         DateTime               @db.Timestamptz(3)
-  status              ReportStatus
-  outsideAssignedArea Boolean
-  requiresExtraReview Boolean
-  reporter            User                   @relation(fields: [reporterId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  location            Location               @relation(fields: [locationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  verificationDecision VerificationDecision?
-  alerts               Alert[]
-}
-
-model VerificationDecision {
-  id        String             @id @db.Uuid
-  reportId  String             @unique @db.Uuid
-  officerId String             @db.Uuid
-  result    VerificationResult
-  reason    String?
-  decidedAt DateTime           @db.Timestamptz(3)
-  report    HazardReport       @relation(fields: [reportId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  officer   DmcOfficer         @relation(fields: [officerId], references: [userId], onDelete: Restrict, onUpdate: Cascade)
-}
-
-model Alert {
-  id                 String                 @id @db.Uuid
-  sourceReportId     String                 @db.Uuid
-  createdByOfficerId String                 @db.Uuid
-  hazardType         HazardType
-  severity           AlertSeverity
-  message            String
-  safetyInstructions String
-  status             AlertStatus
-  version            Int
-  parentAlertId      String?                @db.Uuid
-  issuedAt           DateTime?              @db.Timestamptz(3)
-  cancelledAt        DateTime?              @db.Timestamptz(3)
-  cancellationReason String?
-  sourceReport       HazardReport           @relation(fields: [sourceReportId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  createdByOfficer   DmcOfficer             @relation(fields: [createdByOfficerId], references: [userId], onDelete: Restrict, onUpdate: Cascade)
-  parentAlert        Alert?                 @relation("AlertVersions", fields: [parentAlertId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  replacementAlerts  Alert[]                @relation("AlertVersions")
-  targetZones        AlertTargetZone[]
-  deliveries         NotificationDelivery[]
-  audits             BroadcastAudit[]
-
-  @@index([sourceReportId])
-  @@index([parentAlertId])
-}
-
-model AlertTargetZone {
-  alertId      String     @db.Uuid
-  targetZoneId String     @db.Uuid
-  alert        Alert      @relation(fields: [alertId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  targetZone   TargetZone @relation(fields: [targetZoneId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-
-  @@id([alertId, targetZoneId])
-}
-
-model NotificationDelivery {
-  id                String         @id @db.Uuid
-  alertId           String         @db.Uuid
-  recipientRef      String
-  status            DeliveryStatus
-  attemptNo         Int
-  lastFailureReason String?
-  updatedAt         DateTime       @db.Timestamptz(3)
-  alert             Alert          @relation(fields: [alertId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-}
-
-model BroadcastAudit {
-  id        String     @id @db.Uuid
-  alertId   String     @db.Uuid
-  officerId String     @db.Uuid
-  action    String
-  reason    String?
-  createdAt DateTime   @db.Timestamptz(3)
-  alert     Alert      @relation(fields: [alertId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  officer   DmcOfficer @relation(fields: [officerId], references: [userId], onDelete: Restrict, onUpdate: Cascade)
-}
-
-model Shelter {
-  id               String          @id @db.Uuid
-  name             String
-  districtId       String          @db.Uuid
-  locationId       String          @db.Uuid
-  capacity         Int
-  currentOccupancy Int
-  location         Location        @relation(fields: [locationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  reliefRequests   ReliefRequest[]
-}
-
-model ReliefRequest {
-  id                 String                 @id @db.Uuid
-  shelterId          String                 @db.Uuid
-  targetZoneId       String                 @db.Uuid
-  status             ReliefRequestStatus
-  priorityNote       String?
-  createdAt          DateTime               @db.Timestamptz(3)
-  version            Int
-  shelter            Shelter                @relation(fields: [shelterId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  targetZone         TargetZone             @relation(fields: [targetZoneId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  items              ReliefRequestItem[]
-  allocations        ResourceAllocation[]
-  resupplyRequests   PartnerResupplyRequest[]
-}
-
-model ReliefRequestItem {
-  id              String           @id @db.Uuid
-  requestId       String           @db.Uuid
-  supplyType      SupplyType
-  requestedQty    Int
-  request         ReliefRequest    @relation(fields: [requestId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  allocationItems AllocationItem[]
-
-  @@unique([requestId, supplyType])
-}
-
-model WarehouseStock {
-  id           String     @id @db.Uuid
-  districtId   String     @db.Uuid
-  supplyType   SupplyType
-  availableQty Int
-  version      Int
-  syncedAt     DateTime   @db.Timestamptz(3)
-
-  @@unique([districtId, supplyType])
-}
-
-model ResourceAllocation {
-  id             String              @id @db.Uuid
-  requestId      String              @db.Uuid
-  officerId      String              @db.Uuid
-  idempotencyKey String              @db.Uuid
-  notes          String?
-  createdAt      DateTime            @db.Timestamptz(3)
-  request        ReliefRequest       @relation(fields: [requestId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  officer        DistrictOfficer     @relation(fields: [officerId], references: [userId], onDelete: Restrict, onUpdate: Cascade)
-  items          AllocationItem[]
-  distributionLogs DistributionLog[]
-  dispatch       TransportDispatch?
-
-  @@unique([officerId, idempotencyKey])
-}
-
-model AllocationItem {
-  id              String             @id @db.Uuid
-  allocationId    String             @db.Uuid
-  requestItemId   String             @db.Uuid
-  supplyType      SupplyType
-  allocatedQty    Int
-  allocation      ResourceAllocation @relation(fields: [allocationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  requestItem     ReliefRequestItem  @relation(fields: [requestItemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  distributionLog DistributionLog?
-}
-
-model DistributionLog {
-  id               String             @id @db.Uuid
-  allocationId     String             @db.Uuid
-  allocationItemId String             @unique @db.Uuid
-  districtId       String             @db.Uuid
-  supplyType       SupplyType
-  quantity         Int
-  createdAt        DateTime           @db.Timestamptz(3)
-  allocation       ResourceAllocation @relation(fields: [allocationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  allocationItem   AllocationItem     @relation(fields: [allocationItemId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-}
-
-model PartnerOrganisation {
-  id               String                    @id @db.Uuid
-  districtId       String                    @db.Uuid
-  name             String
-  type             PartnerOrganisationType
-  active           Boolean
-  resupplyRequests PartnerResupplyRequest[]
-}
-
-model PartnerResupplyRequest {
-  id                    String                  @id @db.Uuid
-  reliefRequestId       String                  @db.Uuid
-  partnerOrganisationId String                  @db.Uuid
-  supplyType            SupplyType
-  requestedQty          Int
-  status                PartnerResupplyStatus
-  createdAt             DateTime                @db.Timestamptz(3)
-  reliefRequest         ReliefRequest           @relation(fields: [reliefRequestId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  partnerOrganisation   PartnerOrganisation     @relation(fields: [partnerOrganisationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-
-  @@index([reliefRequestId, partnerOrganisationId, supplyType, status])
-}
-
-model RescueTeam {
-  id          String           @id @db.Uuid
-  districtId  String           @db.Uuid
-  name        String
-  status      RescueTeamStatus
-  locationId  String           @db.Uuid
-  version     Int
-  location    Location         @relation(fields: [locationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  dispatches  TransportDispatch[]
-}
-
-model TransportDispatch {
-  id                    String             @id @db.Uuid
-  allocationId          String             @unique @db.Uuid
-  rescueTeamId          String             @db.Uuid
-  destinationLocationId String             @db.Uuid
-  dispatchedAt          DateTime           @db.Timestamptz(3)
-  allocation            ResourceAllocation @relation(fields: [allocationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  rescueTeam            RescueTeam         @relation(fields: [rescueTeamId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  destinationLocation   Location           @relation(fields: [destinationLocationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 }
