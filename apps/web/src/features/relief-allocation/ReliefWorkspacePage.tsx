@@ -10,13 +10,14 @@ import {
   formatSeverity,
   formatSupplyType,
   humanizeConstant,
-  itemMaximum,
   previewRequestStatus,
   previewShortage,
   validateDraft,
   type AllocationDraft,
   type ReliefAllocationApi,
 } from "./relief-ui";
+import { ReliefAllocationPanel } from "./ReliefAllocationPanel";
+import { ReliefRequestSummary } from "./ReliefRequestSummary";
 
 interface ReliefWorkspacePageProps {
   readonly api: ReliefAllocationApi;
@@ -41,6 +42,7 @@ type ConflictCode =
 type WorkspacePhase =
   | "LOADING"
   | "LOAD_ERROR"
+  | "ACCESS_DENIED"
   | "EDITING"
   | "CONFIRMING"
   | "SUBMITTING"
@@ -124,8 +126,13 @@ export function ReliefWorkspacePage({
         setDraft(createInitialDraft(loaded));
         setPhase("EDITING");
       })
-      .catch(() => {
-        if (current) setPhase("LOAD_ERROR");
+      .catch((error: unknown) => {
+        if (!current) return;
+        setPhase(
+          error instanceof ApiClientError && (error.status === 401 || error.status === 403)
+            ? "ACCESS_DENIED"
+            : "LOAD_ERROR",
+        );
       });
     return () => {
       current = false;
@@ -241,20 +248,43 @@ export function ReliefWorkspacePage({
 
   if (phase === "LOADING") {
     return (
-      <main className="page-shell" id="main-content">
+      <section className="relief-workspace relief-workflow-state">
         <WorkspaceBackButton goToQueue={goToQueue} />
         <section className="state-panel" aria-live="polite" aria-busy="true">
           <span className="spinner" aria-hidden="true" />
           <h1>Loading allocation workspace</h1>
           <p>Refreshing request demand, warehouse stock, partners, and available teams.</p>
         </section>
-      </main>
+      </section>
+    );
+  }
+
+  if (phase === "ACCESS_DENIED") {
+    return (
+      <section className="relief-workspace relief-workflow-state">
+        <WorkspaceBackButton goToQueue={goToQueue} />
+        <section className="state-panel state-panel--error" role="alert">
+          <span className="state-icon" aria-hidden="true">
+            !
+          </span>
+          <h1 ref={statusHeading} tabIndex={-1}>
+            District Officer access required
+          </h1>
+          <p>
+            This request can only be opened with a configured District Officer development identity.
+            The API remains the authority for access.
+          </p>
+          <button className="button button--secondary" onClick={goToQueue}>
+            Back to queue
+          </button>
+        </section>
+      </section>
     );
   }
 
   if (phase === "LOAD_ERROR" || !details || !draft) {
     return (
-      <main className="page-shell" id="main-content">
+      <section className="relief-workspace relief-workflow-state">
         <WorkspaceBackButton goToQueue={goToQueue} />
         <section className="state-panel state-panel--error" role="alert">
           <span className="state-icon" aria-hidden="true">
@@ -271,7 +301,7 @@ export function ReliefWorkspacePage({
             </button>
           </div>
         </section>
-      </main>
+      </section>
     );
   }
 
@@ -290,7 +320,7 @@ export function ReliefWorkspacePage({
   if (phase === "CONFLICT" && conflictCode) {
     const content = conflictContent[conflictCode];
     return (
-      <main className="page-shell narrow-shell" id="main-content">
+      <section className="relief-workspace relief-workflow-state">
         <section className="state-panel state-panel--warning" role="alert">
           <span className="state-icon" aria-hidden="true">
             !
@@ -318,13 +348,13 @@ export function ReliefWorkspacePage({
             </button>
           </div>
         </section>
-      </main>
+      </section>
     );
   }
 
   if (phase === "SUBMITTING" || phase === "RECOVERING") {
     return (
-      <main className="page-shell narrow-shell" id="main-content">
+      <section className="relief-workspace relief-workflow-state">
         <section className="state-panel" aria-live="assertive" aria-busy="true">
           <span className="spinner" aria-hidden="true" />
           <h1 ref={statusHeading} tabIndex={-1}>
@@ -336,13 +366,13 @@ export function ReliefWorkspacePage({
               : "Connection was interrupted. Checking whether the allocation was committed…"}
           </p>
         </section>
-      </main>
+      </section>
     );
   }
 
   if (phase === "RECOVERY_NOT_FOUND" && attempt) {
     return (
-      <main className="page-shell narrow-shell" id="main-content">
+      <section className="relief-workspace relief-workflow-state">
         <section className="state-panel state-panel--warning" role="status">
           <span className="state-icon" aria-hidden="true">
             ?
@@ -363,13 +393,13 @@ export function ReliefWorkspacePage({
             </button>
           </div>
         </section>
-      </main>
+      </section>
     );
   }
 
   if (phase === "UNCERTAIN" && attempt) {
     return (
-      <main className="page-shell narrow-shell" id="main-content">
+      <section className="relief-workspace relief-workflow-state">
         <section className="state-panel state-panel--warning" role="alert">
           <span className="state-icon" aria-hidden="true">
             ?
@@ -387,13 +417,13 @@ export function ReliefWorkspacePage({
             Retry recovery
           </button>
         </section>
-      </main>
+      </section>
     );
   }
 
   if (phase === "FAILURE") {
     return (
-      <main className="page-shell narrow-shell" id="main-content">
+      <section className="relief-workspace relief-workflow-state">
         <section className="state-panel state-panel--error" role="alert">
           <span className="state-icon" aria-hidden="true">
             !
@@ -411,7 +441,7 @@ export function ReliefWorkspacePage({
             </button>
           </div>
         </section>
-      </main>
+      </section>
     );
   }
 
@@ -431,7 +461,7 @@ export function ReliefWorkspacePage({
   }
 
   return (
-    <main className="page-shell" id="main-content">
+    <section className="relief-workspace relief-workspace--editing">
       <WorkspaceBackButton goToQueue={goToQueue} />
       <section className="workspace-heading">
         <div>
@@ -451,288 +481,18 @@ export function ReliefWorkspacePage({
         </div>
       </section>
 
-      <section className="context-grid" aria-label="Request context">
-        <article className="context-card">
-          <p className="section-kicker">Request overview</p>
-          <h2>Current request</h2>
-          <dl className="detail-list">
-            <div>
-              <dt>Created</dt>
-              <dd>{formatDateTime(details.createdAt)}</dd>
-            </div>
-            <div>
-              <dt>Request note</dt>
-              <dd>{details.priorityNote || "No priority note provided"}</dd>
-            </div>
-          </dl>
-        </article>
-        <article className="context-card">
-          <p className="section-kicker">Shelter</p>
-          <h2>{details.shelter.name}</h2>
-          <dl className="metric-pair">
-            <div>
-              <dt>Occupancy</dt>
-              <dd>{details.shelter.currentOccupancy}</dd>
-            </div>
-            <div>
-              <dt>Capacity</dt>
-              <dd>{details.shelter.capacity}</dd>
-            </div>
-          </dl>
-          <p className="supporting-text">
-            {Math.round(details.shelter.occupancyRate * 100)}% occupied · Read-only shelter data
-          </p>
-        </article>
-        <article className="context-card">
-          <p className="section-kicker">Target zone</p>
-          <h2>{details.targetZone.name}</h2>
-          <p className="location-copy">
-            {details.shelter.location.address || "Mapped shelter location"}
-          </p>
-          <p className="supporting-text">
-            {details.shelter.location.latitude.toFixed(4)},{" "}
-            {details.shelter.location.longitude.toFixed(4)}
-          </p>
-        </article>
-      </section>
+      <ReliefRequestSummary details={details} />
 
-      <section className="workspace-section" aria-labelledby="supply-heading">
-        <div className="section-intro">
-          <div>
-            <p className="section-kicker">Warehouse allocation</p>
-            <h2 id="supply-heading">Demand and current stock</h2>
-          </div>
-          <p>Stock is revalidated when the allocation is confirmed.</p>
-        </div>
-        <div className="table-scroll">
-          <table className="allocation-table">
-            <thead>
-              <tr>
-                <th scope="col">Supply</th>
-                <th scope="col">Requested</th>
-                <th scope="col">Previously allocated</th>
-                <th scope="col">Outstanding demand</th>
-                <th scope="col">Available stock</th>
-                <th scope="col">Allocate now</th>
-              </tr>
-            </thead>
-            <tbody>
-              {details.items.map((item) => {
-                const inputId = `quantity-${item.requestItemId}`;
-                const error = showValidation
-                  ? validation?.quantityErrors[item.requestItemId]
-                  : undefined;
-                return (
-                  <tr key={item.requestItemId}>
-                    <th scope="row">{formatSupplyType(item.supplyType)}</th>
-                    <td>{item.requestedQty}</td>
-                    <td>{item.previouslyAllocatedQty}</td>
-                    <td>
-                      <strong>{item.outstandingQty}</strong>
-                    </td>
-                    <td>{item.warehouseStock.availableQty}</td>
-                    <td>
-                      {item.outstandingQty > 0 ? (
-                        <div className="quantity-field">
-                          <label className="sr-only" htmlFor={inputId}>
-                            Allocate {formatSupplyType(item.supplyType)} now
-                          </label>
-                          <input
-                            id={inputId}
-                            type="number"
-                            min="0"
-                            max={itemMaximum(item)}
-                            step="1"
-                            inputMode="numeric"
-                            value={draft.quantities[item.requestItemId] ?? ""}
-                            aria-invalid={Boolean(error)}
-                            aria-describedby={error ? `${inputId}-error` : undefined}
-                            onChange={(event) =>
-                              updateDraft({
-                                ...draft,
-                                quantities: {
-                                  ...draft.quantities,
-                                  [item.requestItemId]: event.target.value,
-                                },
-                              })
-                            }
-                          />
-                          <span>max {itemMaximum(item)}</span>
-                          {error && (
-                            <small id={`${inputId}-error`} className="field-error">
-                              {error}
-                            </small>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="complete-label">Fulfilled</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="workspace-section" aria-labelledby="shortage-heading">
-        <div className="section-intro">
-          <div>
-            <p className="section-kicker">Partner resupply</p>
-            <h2 id="shortage-heading">Remaining shortages</h2>
-          </div>
-          <p>Each positive shortage needs an eligible district partner.</p>
-        </div>
-        <div className="shortage-grid">
-          {details.items
-            .filter((item) => item.outstandingQty > 0)
-            .map((item) => {
-              const shortage = previewShortage(item, draft);
-              const selectId = `partner-${item.requestItemId}`;
-              const error = showValidation
-                ? validation?.partnerErrors[item.requestItemId]
-                : undefined;
-              return (
-                <article
-                  className={`shortage-card ${shortage === 0 ? "shortage-card--covered" : ""}`}
-                  key={item.requestItemId}
-                >
-                  <div>
-                    <p>{formatSupplyType(item.supplyType)}</p>
-                    <strong>{shortage} units short</strong>
-                  </div>
-                  {shortage > 0 ? (
-                    <div className="field-group">
-                      <label htmlFor={selectId}>Resupply partner</label>
-                      <select
-                        id={selectId}
-                        value={draft.partnerIds[item.requestItemId] ?? ""}
-                        aria-invalid={Boolean(error)}
-                        aria-describedby={error ? `${selectId}-error` : undefined}
-                        onChange={(event) =>
-                          updateDraft({
-                            ...draft,
-                            partnerIds: {
-                              ...draft.partnerIds,
-                              [item.requestItemId]: event.target.value,
-                            },
-                          })
-                        }
-                      >
-                        <option value="">Select an eligible partner</option>
-                        {details.eligiblePartners.map((partner) => (
-                          <option key={partner.id} value={partner.id}>
-                            {partner.name} · {humanizeConstant(partner.type)}
-                          </option>
-                        ))}
-                      </select>
-                      {error && (
-                        <small id={`${selectId}-error`} className="field-error">
-                          {error}
-                        </small>
-                      )}
-                    </div>
-                  ) : (
-                    <span className="covered-badge">Covered by warehouse allocation</span>
-                  )}
-                </article>
-              );
-            })}
-        </div>
-      </section>
-
-      {details.targetZone.severity === ZoneSeverity.CRITICAL && hasPositiveAllocation && (
-        <section className="workspace-section dispatch-panel" aria-labelledby="dispatch-heading">
-          <div>
-            <p className="section-kicker">Optional critical-zone support</p>
-            <h2 id="dispatch-heading">Rescue transport dispatch</h2>
-            <p>Select one currently available team, or continue without dispatch.</p>
-          </div>
-          <div className="field-group dispatch-select">
-            <label htmlFor="rescue-team">Available rescue team</label>
-            <select
-              id="rescue-team"
-              value={draft.rescueTeamId}
-              onChange={(event) => updateDraft({ ...draft, rescueTeamId: event.target.value })}
-            >
-              <option value="">No rescue dispatch</option>
-              {details.availableRescueTeams.map((team) => (
-                <option key={team.id} value={team.id}>
-                  {team.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </section>
-      )}
-
-      <section className="workspace-section" aria-labelledby="history-heading">
-        <div className="section-intro">
-          <div>
-            <p className="section-kicker">Audit context</p>
-            <h2 id="history-heading">Previous allocations</h2>
-          </div>
-        </div>
-        {details.previousAllocations.length > 0 ? (
-          <div className="history-list">
-            {details.previousAllocations.map((allocation) => (
-              <article className="history-item" key={allocation.allocationId}>
-                <div>
-                  <strong>{formatDateTime(allocation.createdAt)}</strong>
-                  <span>Allocation …{allocation.allocationId.slice(-8)}</span>
-                </div>
-                <ul>
-                  {allocation.items.map((item) => (
-                    <li key={item.requestItemId}>
-                      {formatSupplyType(item.supplyType)}: {item.allocatedQty} units
-                    </li>
-                  ))}
-                </ul>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <p className="empty-inline">No previous warehouse allocation has been committed.</p>
-        )}
-      </section>
-
-      <section className="workspace-section notes-section" aria-labelledby="notes-heading">
-        <div>
-          <p className="section-kicker">Optional context</p>
-          <h2 id="notes-heading">Allocation notes</h2>
-        </div>
-        <div className="field-group">
-          <label htmlFor="allocation-notes">Notes for this allocation</label>
-          <textarea
-            id="allocation-notes"
-            maxLength={500}
-            rows={4}
-            value={draft.notes}
-            aria-invalid={Boolean(showValidation && validation?.notesError)}
-            aria-describedby="notes-help notes-count"
-            onChange={(event) => updateDraft({ ...draft, notes: event.target.value })}
-          />
-          <div className="field-meta">
-            <small id="notes-help">Operational context only; notes are not required.</small>
-            <small id="notes-count">{draft.notes.length}/500</small>
-          </div>
-          {showValidation && validation?.notesError && (
-            <small className="field-error">{validation.notesError}</small>
-          )}
-        </div>
-      </section>
-
-      <footer className="workspace-actions">
-        <div>
-          <strong>Ready to review?</strong>
-          <span>No changes are submitted until final confirmation.</span>
-        </div>
-        <button className="button button--primary button--large" onClick={reviewAllocation}>
-          Review allocation
-        </button>
-      </footer>
-    </main>
+      <ReliefAllocationPanel
+        details={details}
+        draft={draft}
+        validation={validation}
+        showValidation={showValidation}
+        hasPositiveAllocation={Boolean(hasPositiveAllocation)}
+        updateDraft={updateDraft}
+        reviewAllocation={reviewAllocation}
+      />
+    </section>
   );
 }
 
@@ -768,7 +528,7 @@ function ConfirmationView({
   const teamName = details.availableRescueTeams.find(({ id }) => id === command.rescueTeamId)?.name;
 
   return (
-    <main className="page-shell review-shell" id="main-content">
+    <section className="relief-workspace relief-review">
       <WorkspaceBackButton goToQueue={goToQueue} />
       <section className="review-heading">
         <div>
@@ -885,7 +645,7 @@ function ConfirmationView({
           Confirm allocation
         </button>
       </footer>
-    </main>
+    </section>
   );
 }
 
@@ -903,7 +663,7 @@ function ReceiptView({
   readonly viewUpdatedRequest: () => void;
 }) {
   return (
-    <main className="page-shell receipt-shell" id="main-content">
+    <section className="relief-workspace relief-receipt">
       <section className="receipt-hero" aria-live="polite">
         <span className="success-mark" aria-hidden="true">
           ✓
@@ -993,6 +753,6 @@ function ReceiptView({
           View updated request
         </button>
       </div>
-    </main>
+    </section>
   );
 }

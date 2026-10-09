@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ReliefAllocationFeature } from "./ReliefAllocationFeature";
@@ -47,7 +47,11 @@ describe("allocation confirmation and submission", () => {
     expect(screen.getByText("Gampaha Relief Network")).toBeInTheDocument();
     expect(screen.getByText("Kelani Rescue One")).toBeInTheDocument();
     expect(screen.getByText("Priority medical delivery.")).toBeInTheDocument();
-    expect(screen.getByText("Partially Allocated")).toBeInTheDocument();
+    const outcome = screen
+      .getByRole("heading", { name: "Request state preview" })
+      .closest("section");
+    expect(outcome).not.toBeNull();
+    expect(within(outcome!).getByText("Partially Allocated")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Confirm allocation" })).toBeEnabled();
   });
 
@@ -113,9 +117,10 @@ describe("allocation confirmation and submission", () => {
     });
     await waitFor(() => expect(receiptHeading).toHaveFocus());
     expect(screen.getByText(receipt.allocationId)).toBeInTheDocument();
-    expect(screen.getByText("60 units")).toBeInTheDocument();
-    expect(screen.getByText("12 units")).toBeInTheDocument();
-    expect(screen.getByText("Team en route")).toBeInTheDocument();
+    const authoritativeReceipt = screen.getByLabelText("Allocation receipt");
+    expect(within(authoritativeReceipt).getByText("60 units")).toBeInTheDocument();
+    expect(within(authoritativeReceipt).getByText("12 units")).toBeInTheDocument();
+    expect(within(authoritativeReceipt).getByText("Team en route")).toBeInTheDocument();
   });
 
   it("recovers an uncertain POST using the same idempotency key", async () => {

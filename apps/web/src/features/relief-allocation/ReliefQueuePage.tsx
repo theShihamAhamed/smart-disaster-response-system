@@ -1,3 +1,4 @@
+import { ApiClientError } from "@disaster/api-client";
 import {
   ReliefRequestStatus,
   ZoneSeverity,
@@ -18,17 +19,25 @@ import {
 interface ReliefQueuePageProps {
   readonly api: ReliefAllocationApi;
   readonly openRequest: (requestId: string) => void;
+  readonly selectedRequestId?: string | undefined;
+  readonly refreshToken?: number;
 }
 
 type QueueState =
   | { readonly kind: "LOADING" }
   | { readonly kind: "ERROR" }
+  | { readonly kind: "ACCESS_DENIED" }
   | { readonly kind: "READY"; readonly requests: readonly ReliefRequestQueueItem[] };
 
 const statuses = Object.values(ReliefRequestStatus);
 const severities = Object.values(ZoneSeverity);
 
-export function ReliefQueuePage({ api, openRequest }: ReliefQueuePageProps) {
+export function ReliefQueuePage({
+  api,
+  openRequest,
+  selectedRequestId,
+  refreshToken = 0,
+}: ReliefQueuePageProps) {
   const [status, setStatus] = useState<ReliefRequestStatusValue | "">("");
   const [severity, setSeverity] = useState<ZoneSeverityValue | "">("");
   const [reloadToken, setReloadToken] = useState(0);
@@ -45,33 +54,32 @@ export function ReliefQueuePage({ api, openRequest }: ReliefQueuePageProps) {
       .then((requests) => {
         if (current) setState({ kind: "READY", requests });
       })
-      .catch(() => {
-        if (current) setState({ kind: "ERROR" });
+      .catch((error: unknown) => {
+        if (!current) return;
+        setState(
+          error instanceof ApiClientError && (error.status === 401 || error.status === 403)
+            ? { kind: "ACCESS_DENIED" }
+            : { kind: "ERROR" },
+        );
       });
     return () => {
       current = false;
     };
-  }, [api, reloadToken, severity, status]);
+  }, [api, refreshToken, reloadToken, severity, status]);
 
   return (
-    <main className="page-shell" id="main-content">
-      <section className="page-heading">
+    <aside className="relief-queue" aria-labelledby="relief-queue-heading">
+      <div className="relief-queue__header">
         <div>
-          <p className="eyebrow">District operations</p>
-          <h1>Relief allocation</h1>
-          <p className="lede">
-            Review the district&apos;s ranked actionable requests and allocate verified resources.
-          </p>
+          <p className="relief-kicker">District priority queue</p>
+          <h1 id="relief-queue-heading">Shelters needing supply</h1>
         </div>
-        <div className="queue-summary" aria-label="Queue status">
-          <span className="queue-summary__value">
-            {state.kind === "READY" ? state.requests.length : "—"}
-          </span>
-          <span>actionable requests</span>
+        <div className="relief-queue__count" aria-label="Actionable request count">
+          <span>{state.kind === "READY" ? state.requests.length : "—"}</span>
         </div>
-      </section>
+      </div>
 
-      <section className="filter-bar" aria-label="Relief request filters">
+      <section className="relief-queue__filters" aria-label="Relief request filters">
         <div className="field-group">
           <label htmlFor="status-filter">Request status</label>
           <select
@@ -106,7 +114,7 @@ export function ReliefQueuePage({ api, openRequest }: ReliefQueuePageProps) {
         </div>
         {(status || severity) && (
           <button
-            className="button button--quiet filter-reset"
+            className="relief-button relief-button--quiet relief-queue__filter-reset"
             type="button"
             onClick={() => {
               setStatus("");
@@ -127,20 +135,36 @@ export function ReliefQueuePage({ api, openRequest }: ReliefQueuePageProps) {
       )}
 
       {state.kind === "ERROR" && (
-        <section className="state-panel state-panel--error" role="alert">
+        <section className="relief-queue__state relief-queue__state--error" role="alert">
           <span className="state-icon" aria-hidden="true">
             !
           </span>
           <h2>Relief requests could not be loaded</h2>
           <p>Check the API connection and try loading the district queue again.</p>
-          <button className="button button--primary" onClick={() => setReloadToken((v) => v + 1)}>
+          <button
+            className="relief-button relief-button--primary"
+            onClick={() => setReloadToken((v) => v + 1)}
+          >
             Retry loading
           </button>
         </section>
       )}
 
+      {state.kind === "ACCESS_DENIED" && (
+        <section className="relief-queue__state relief-queue__state--error" role="alert">
+          <span className="state-icon" aria-hidden="true">
+            !
+          </span>
+          <h2>District Officer access required</h2>
+          <p>
+            Resource Allocation requires a configured District Officer development identity. The API
+            remains the authority for access.
+          </p>
+        </section>
+      )}
+
       {state.kind === "READY" && state.requests.length === 0 && (
-        <section className="state-panel">
+        <section className="relief-queue__state">
           <span className="state-icon state-icon--calm" aria-hidden="true">
             ✓
           </span>
@@ -153,27 +177,24 @@ export function ReliefQueuePage({ api, openRequest }: ReliefQueuePageProps) {
       )}
 
       {state.kind === "READY" && state.requests.length > 0 && (
-        <section className="request-list" aria-label="Ranked relief requests">
-          <div className="section-intro">
-            <div>
-              <p className="section-kicker">Server-ranked priority</p>
-              <h2>Actionable requests</h2>
-            </div>
-            <p>Order reflects severity, shelter pressure, and request age.</p>
-          </div>
-          <div className="request-grid">
+        <section className="relief-queue__list" aria-label="Ranked relief requests">
+          <p className="relief-queue__ranking-note">
+            Server-ranked by severity, shelter pressure, then age.
+          </p>
+          <div>
             {state.requests.map((request, index) => (
               <RequestCard
                 key={request.requestId}
                 request={request}
                 rank={index + 1}
                 openRequest={openRequest}
+                selected={request.requestId === selectedRequestId}
               />
             ))}
           </div>
         </section>
       )}
-    </main>
+    </aside>
   );
 }
 
@@ -181,14 +202,19 @@ function RequestCard({
   request,
   rank,
   openRequest,
+  selected,
 }: {
   readonly request: ReliefRequestQueueItem;
   readonly rank: number;
   readonly openRequest: (requestId: string) => void;
+  readonly selected: boolean;
 }) {
   const occupancyPercentage = Math.round(request.shelter.occupancyRate * 100);
   return (
-    <article className="request-card">
+    <article
+      className={`request-card relief-request ${selected ? "is-selected" : ""}`}
+      aria-current={selected ? "true" : undefined}
+    >
       <div className="request-card__topline">
         <span className="rank-badge">Priority {rank}</span>
         <span
@@ -236,12 +262,12 @@ function RequestCard({
       <div className="request-card__footer">
         <span>Requested {formatDateTime(request.createdAt)}</span>
         <button
-          className="button button--primary"
+          className="relief-request__open"
           type="button"
           onClick={() => openRequest(request.requestId)}
           aria-label={`Open allocation workspace for ${request.shelter.name}`}
         >
-          Review request
+          {selected ? "Selected request" : "Review request"}
         </button>
       </div>
     </article>

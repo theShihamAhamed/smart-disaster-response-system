@@ -28,8 +28,12 @@ describe("relief allocation workspace", () => {
     expect(screen.getByText("170")).toBeInTheDocument();
     expect(screen.getByText("200")).toBeInTheDocument();
     expect(screen.getByText(/85% occupied/i)).toBeInTheDocument();
-    expect(screen.getByText("Kelani River Bank")).toBeInTheDocument();
+    const summary = screen.getByLabelText("Selected request and shelter context");
+    expect(within(summary).getByText("Kelani River Bank")).toBeInTheDocument();
     expect(screen.getByText("Kelaniya, Gampaha District")).toBeInTheDocument();
+    expect(
+      screen.getByText(/resource allocation does not change shelter occupancy/i),
+    ).toBeVisible();
     expect(
       screen.getByText("Stock is revalidated when the allocation is confirmed."),
     ).toBeInTheDocument();

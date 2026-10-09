@@ -1,4 +1,3 @@
-import { PROJECT_NAME } from "@disaster/config";
 import { useEffect, useState } from "react";
 
 import { sharedReliefAllocationClient } from "../../shared-api-client";
@@ -10,6 +9,7 @@ export interface ReliefAllocationFeatureProps {
   readonly api?: ReliefAllocationApi;
   readonly initialPath?: string;
   readonly createIdempotencyKey?: () => string;
+  readonly navigate?: (path: string) => void;
 }
 
 type ReliefRoute = { readonly kind: "QUEUE" } | { readonly kind: "WORKSPACE"; requestId: string };
@@ -30,68 +30,64 @@ export function ReliefAllocationFeature({
   api = sharedReliefAllocationClient,
   initialPath,
   createIdempotencyKey = browserIdempotencyKey,
+  navigate: navigateInShell,
 }: ReliefAllocationFeatureProps) {
   const [path, setPath] = useState(initialPath ?? window.location.pathname);
+  const [queueRefreshToken, setQueueRefreshToken] = useState(0);
   const route = parseRoute(path);
 
   useEffect(() => {
-    if (initialPath !== undefined) return;
-    const onPopState = () => setPath(window.location.pathname);
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
+    if (initialPath !== undefined) setPath(initialPath);
   }, [initialPath]);
 
   function navigate(nextPath: string) {
-    if (initialPath === undefined) {
-      window.history.pushState({}, "", nextPath);
-      window.scrollTo?.({ top: 0, behavior: "smooth" });
-    }
+    navigateInShell?.(nextPath);
     setPath(nextPath);
   }
 
-  return (
-    <div className="app-shell">
-      <a className="skip-link" href="#main-content">
-        Skip to main content
-      </a>
-      <header className="app-header">
-        <button className="brand-button" type="button" onClick={() => navigate("/relief")}>
-          <span className="brand-mark" aria-hidden="true">
-            SR
-          </span>
-          <span>
-            <strong>{PROJECT_NAME}</strong>
-            <small>District Operations</small>
-          </span>
-        </button>
-        <nav aria-label="Officer navigation">
-          <button className="nav-item nav-item--active" onClick={() => navigate("/relief")}>
-            Relief allocation
-          </button>
-        </nav>
-        <div className="officer-chip" aria-label="Authenticated role">
-          <span aria-hidden="true">DO</span>
-          <div>
-            <strong>District Officer</strong>
-            <small>Development identity</small>
-          </div>
-        </div>
-      </header>
+  function returnToQueue() {
+    setQueueRefreshToken((value) => value + 1);
+    navigate("/relief");
+  }
 
-      {route.kind === "QUEUE" ? (
+  return (
+    <section className="relief-feature" aria-label="Relief resource allocation">
+      <div className="relief-feature__heading">
+        <div>
+          <p className="relief-kicker">DMC district operations</p>
+          <h1>Relief resource allocation</h1>
+        </div>
+        <p>Review ranked shelter needs and prepare a verified allocation.</p>
+      </div>
+
+      <div className="relief-dashboard">
         <ReliefQueuePage
           api={api}
           openRequest={(requestId) => navigate(`/relief/${encodeURIComponent(requestId)}`)}
+          selectedRequestId={route.kind === "WORKSPACE" ? route.requestId : undefined}
+          refreshToken={queueRefreshToken}
         />
-      ) : (
-        <ReliefWorkspacePage
-          key={route.requestId}
-          api={api}
-          requestId={route.requestId}
-          createIdempotencyKey={createIdempotencyKey}
-          goToQueue={() => navigate("/relief")}
-        />
-      )}
-    </div>
+
+        {route.kind === "QUEUE" ? (
+          <section className="relief-selection-prompt" aria-labelledby="relief-selection-title">
+            <span aria-hidden="true">01</span>
+            <p className="relief-kicker">Allocation workspace</p>
+            <h2 id="relief-selection-title">Select a relief request</h2>
+            <p>
+              Choose a ranked shelter request to inspect demand, warehouse stock and available
+              response support.
+            </p>
+          </section>
+        ) : (
+          <ReliefWorkspacePage
+            key={route.requestId}
+            api={api}
+            requestId={route.requestId}
+            createIdempotencyKey={createIdempotencyKey}
+            goToQueue={returnToQueue}
+          />
+        )}
+      </div>
+    </section>
   );
 }

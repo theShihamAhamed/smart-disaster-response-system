@@ -28,6 +28,7 @@ describe("ranked relief request queue", () => {
     expect(within(requestCards[0]!).getByText("170/200 (85%)")).toBeInTheDocument();
     expect(within(requestCards[0]!).getByText("60 units")).toBeInTheDocument();
     expect(within(requestCards[1]!).getByText("Biyagama Community Hall")).toBeInTheDocument();
+    expect(requestCards[0]).not.toHaveAttribute("aria-current");
   });
 
   it("shows a clear empty state", async () => {
@@ -90,6 +91,10 @@ describe("ranked relief request queue", () => {
     expect(
       await screen.findByRole("heading", { name: "Kelaniya Central Shelter", level: 1 }),
     ).toBeInTheDocument();
+    expect(screen.getByText("Selected request").closest("article")).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
     expect(api.getReliefRequest).toHaveBeenCalledWith(queue[0]!.requestId);
   });
 });
