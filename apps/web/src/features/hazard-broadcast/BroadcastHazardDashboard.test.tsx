@@ -134,6 +134,17 @@ describe("BroadcastHazardDashboard", () => {
     expect(screen.getByRole("region", { name: /alert draft editor/i })).toBeInTheDocument();
   });
 
+  it("broadcasts the local mock draft without requiring an API", async () => {
+    render(<BroadcastHazardDashboard />);
+
+    fireEvent.click(screen.getByRole("button", { name: /preview & validate broadcast/i }));
+    fireEvent.click(screen.getByRole("button", { name: /confirm & send broadcast/i }));
+    fireEvent.click(screen.getByRole("button", { name: /yes, broadcast alert now/i }));
+
+    expect(await screen.findByText(/alert broadcast successfully/i)).toBeInTheDocument();
+    expect(await screen.findAllByText("ACTIVE")).toHaveLength(3);
+  });
+
   it("allows selecting target zones via checkboxes", () => {
     render(<BroadcastHazardDashboard />);
 
