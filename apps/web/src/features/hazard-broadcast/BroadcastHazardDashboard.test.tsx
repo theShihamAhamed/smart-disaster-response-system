@@ -384,19 +384,16 @@ describe("App Navigation", () => {
     const mockBroadcastApi = createMockBroadcastApi();
 
     render(
-      <App
-        verificationApi={mockVerificationApi}
-        broadcastApi={mockBroadcastApi}
-        initialView="verification"
-      />,
+      <App verificationApi={mockVerificationApi} broadcastApi={mockBroadcastApi} initialPath="/" />,
     );
 
     // Navigation tabs exist
-    const verificationTab = screen.getByRole("tab", { name: /hazard verification/i });
-    const broadcastTab = screen.getByRole("tab", { name: /broadcast alert/i });
+    const verificationTab = screen.getByRole("link", { name: /hazard verification/i });
+    const broadcastTab = screen.getByRole("link", { name: /broadcast alert/i });
 
     expect(verificationTab).toBeInTheDocument();
     expect(broadcastTab).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /resource allocation/i })).toBeInTheDocument();
 
     // Verification is initially active
     expect(
